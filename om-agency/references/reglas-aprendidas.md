@@ -159,3 +159,17 @@ tensión normal, por lo tanto EMCALI está bien" hecha DESPUÉS de las 13:45 Bog
 2026-09-29 para estas 22 casas está basada en un dato viejo, no en vivo — no se puede
 confirmar el estado real de EMCALI en esos puntos hasta que la plataforma vuelva a
 ingerir `voltageA` del medidor.
+
+## 2026-10-01 — Ausencia del hogar: marcar con 🧳 en las gráficas
+
+**Aplica a:** Monitor de Salud de Flota, Generador de Reportes Operativos Periódicos, Líder de Diagnóstico de Fallas.
+
+**Caso confirmado:** Casa 104 (Reservas de Pance). Desde el 24/09/2026 la demanda cayó a 2–4 kWh/día y la generación cayó con ella; el usuario confirmó que la familia no estaba en la vivienda. Con cero inyección, si la casa no consume y la batería está llena, el inversor recorta: la caída de generación no es una falla.
+
+**Regla de detección:** marcar ausencia del hogar cuando haya **2 o más días seguidos** en que se cumplan las dos condiciones:
+1. Demanda diaria (medidor solar) ≤ 50% de la mediana mensual de la propia casa.
+2. Generación diaria (balance de medidores), dividida por su mediana y normalizada por la del portafolio ese mismo día, ≤ 0,7 (la generación cae con el consumo y no por clima).
+
+**Cómo reportarlo:** en todas las gráficas y tablas por vivienda, anteponer 🧳 al nombre de la casa (ej. "🧳 Casa 104") y explicar el emoji en una nota con las fechas detectadas. Antes de despachar un técnico por bajo desempeño o caída de generación, revisar primero si la casa cumple este patrón.
+
+**Septiembre 2026:** Casa 104 (24–30 sep, confirmada), Casa 18 (28–30), Casa 74 (4–5 y 24–25), Casa 76 (14–15) y Casa 287 (1–2). La regla reencontró sola las ausencias de Casa 74 y Casa 287 que ya registraba el reporte de la primera quincena.
