@@ -14,7 +14,7 @@ Metodo (mismo del reporte mensual):
   * Generacion              = demanda (medidor solar) - importacion + exportacion (medidor de red),
                               con los acumulados energyAI/energyAE de 15 min.
   * Exportacion activa      = energyAE del medidor de red.
-Se excluyen "Piloto Promigas" y "Piloto Huawei".
+Se excluyen "Piloto Promigas", "Piloto Huawei" y la zona Castellana Real (aun no entregada a operaciones).
 """
 import argparse, datetime as dt, html, json, os, statistics as st, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +22,8 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOG = dt.timezone(dt.timedelta(hours=-5))
 EXCLUIR = {"Piloto HUAWEI", "Piloto Promigas"}
+# Zonas fuera del analisis: Castellana Real aun no se entrega a operaciones (etapa de estabilizacion).
+EXCLUIR_ZONAS = {"CASTELLANA REAL"}
 GAP_EVENTO = 15 * 60e3     # cortes del OR mas cercanos que esto forman un solo evento
 PRE, POST = 2 * 60e3, 15 * 60e3
 MIN = 60.0
@@ -84,7 +86,7 @@ def cargar_flota():
     def un_gw(g):
         gid = g["id"]["id"]
         ga = attrs(gid)
-        if ga.get("spcus") in EXCLUIR:
+        if ga.get("spcus") in EXCLUIR or (ga.get("zone") or "").upper() in EXCLUIR_ZONAS:
             return None
         hijos = {}
         for k in get(f"/api/relations/info?fromId={gid}&fromType=DEVICE"):
@@ -610,7 +612,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 <header>
 <div class="eyebrow">O&amp;M · Proyecto Sunny · {len(res)} sistemas</div>
 <h1>{titulo}</h1>
-<p>Últimas {horas} h: {ini.strftime('%d/%m %H:%M')} a {fin.strftime('%d/%m %H:%M')} (hora Bogotá). Respaldo = interrupción del OR (medidor de red) menos la que percibe el cliente (medidor solar). Sin Piloto Promigas ni Piloto Huawei.</p>
+<p>Últimas {horas} h: {ini.strftime('%d/%m %H:%M')} a {fin.strftime('%d/%m %H:%M')} (hora Bogotá). Respaldo = interrupción del OR (medidor de red) menos la que percibe el cliente (medidor solar). Sin Piloto Promigas, Piloto Huawei ni Castellana Real (en estabilización).</p>
 </header>
 {kpis}
 <section><h2>Lo más importante</h2>{top_html}</section>

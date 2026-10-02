@@ -173,3 +173,11 @@ ingerir `voltageA` del medidor.
 **Cómo reportarlo:** en todas las gráficas y tablas por vivienda, anteponer 🧳 al nombre de la casa (ej. "🧳 Casa 104") y explicar el emoji en una nota con las fechas detectadas. Antes de despachar un técnico por bajo desempeño o caída de generación, revisar primero si la casa cumple este patrón.
 
 **Septiembre 2026:** Casa 104 (24–30 sep, confirmada), Casa 18 (28–30), Casa 74 (4–5 y 24–25), Casa 76 (14–15) y Casa 287 (1–2). La regla reencontró sola las ausencias de Casa 74 y Casa 287 que ya registraba el reporte de la primera quincena.
+
+## 2026-10-02 — Castellana Real fuera del análisis (en estabilización)
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Regla:** la zona **Castellana Real** (Casa 121 CR) aún no ha sido entregada a operaciones y está en etapa de estabilización. Se excluye de todos los reportes y KPI de flota (reporte diario, reportes mensuales, dashboards) hasta que el equipo confirme su entrega. Además de los pilotos (Piloto Promigas y Piloto Huawei), que ya estaban excluidos.
+
+**Dónde está aplicada:** `EXCLUIR_ZONAS` en `om-agency/scripts/reporte_diario.py`. Para reincorporarla, quitar `"CASTELLANA REAL"` de ese conjunto.
