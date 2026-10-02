@@ -215,7 +215,7 @@ def procesar(h, a, b, hoy0, dias):
         cl = [x for x in si if x[1] > i0 - PRE and x[0] < i1 + POST]
         clS = sumar(cl, i0 - PRE, i1 + POST) if sol_d else None
         s0 = [v for t, v in soc if i0 - 30 * MIN * 1000 <= t <= i0]
-        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b))
+        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b), cl_iv=[x for x in cl if x[1] > i0 - PRE])
         e["bk_s"] = None if clS is None else max(0.0, orS - clS)
         e["excede"] = None if clS is None else clS > orS
         r["eventos"].append(e)
@@ -290,6 +290,12 @@ def n1(x, d=1):
 def hora(t):
     d = dt.datetime.fromtimestamp(t / 1000, BOG)
     return d.strftime("%H:%M") if d.date() == dt.datetime.now(BOG).date() else d.strftime("%d/%m %H:%M")
+
+
+def rango(a, b):
+    ini = dt.datetime.fromtimestamp(a / 1000, BOG); fin = dt.datetime.fromtimestamp(b / 1000, BOG)
+    f = fin.strftime("%H:%M") if ini.date() == fin.date() else fin.strftime("%d/%m %H:%M")
+    return f"{hora(a)} – {f}"
 
 
 def zn(z):
@@ -605,11 +611,18 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
             if evs:
                 peor = max((res_evento(e) or "ok" for e in evs), key=lambda c: ORDEN[c]) if any(res_evento(e) for e in evs) else "ok"
                 cl, estado_t = peor, ESTADO[peor]
+            horas_html = "—"
+            if evs:
+                partes = []
+                for e in evs:
+                    cli = " · ".join(f"{dt.datetime.fromtimestamp(x / 1000, BOG).strftime('%H:%M')}–{dt.datetime.fromtimestamp(y / 1000, BOG).strftime('%H:%M')}" for x, y in e.get("cl_iv", []) if y - x >= 1000)
+                    partes.append(f"{rango(e['ini'], e['fin'])}" + (f'<span class="sub">cliente sin energía: {cli}</span>' if cli else '<span class="sub">cliente sin interrupción</span>'))
+                horas_html = "".join(f"<div>{x}</div>" for x in partes)
             filas.append(f"""<tr><td class="casa">{'🧳 ' if r['ausente'] else ''}{html.escape(r['casa'])}<span class="sub">{html.escape(r['marca'])}{' · sin paneles (obra)' if r.get('sin_paneles') else ''}</span></td>
-<td class="num">{fmt_min(orS) if evs else '—'}</td><td class="num">{fmt_min(clS) if evs else '—'}</td><td class="num">{n1(p,0)+' %' if p is not None else '—'}</td>
+<td class="num">{horas_html}</td><td class="num">{fmt_min(orS) if evs else '—'}</td><td class="num">{fmt_min(clS) if evs else '—'}</td><td class="num">{n1(p,0)+' %' if p is not None else '—'}</td>
 <td><span class="pill {cl}">{estado_t}</span></td><td class="num">{n1(r.get('soc_min'),0) if r.get('soc_min') is not None else '—'}</td>
 <td class="num">{'sin paneles' if r.get('sin_paneles') else n1(r.get('gen'),1)}</td><td class="num">{(n1(r['des'],0)+' %') if r['des'] is not None else '—'}</td><td class="num">{n1(r.get('exp'),2)}</td></tr>""")
-        sec.append(f'<h3 style="margin:18px 0 6px">{html.escape(zn(z))} · {len(rs)} sistemas</h3><div class="tablewrap"><table><thead><tr><th>Sistema</th><th>Interrup. OR (min)</th><th>Percibida (min)</th><th>% respaldado</th><th>Resultado</th><th>SOC mín. %</th><th>Gen. kWh</th><th>Rend. %</th><th>Export. kWh</th></tr></thead><tbody>{"".join(filas)}</tbody></table></div>')
+        sec.append(f'<h3 style="margin:18px 0 6px">{html.escape(zn(z))} · {len(rs)} sistemas</h3><div class="tablewrap"><table><thead><tr><th>Sistema</th><th>Hora del corte</th><th>Interrup. OR (min)</th><th>Percibida (min)</th><th>% respaldado</th><th>Resultado</th><th>SOC mín. %</th><th>Gen. kWh</th><th>Rend. %</th><th>Export. kWh</th></tr></thead><tbody>{"".join(filas)}</tbody></table></div>')
     titulo = f"Reporte diario O&amp;M · {fin.strftime('%d/%m/%Y')}"
     c_lin = svg_linea(res, a, b, horas)
     c_resp = svg_respaldo(res)
