@@ -181,3 +181,15 @@ ingerir `voltageA` del medidor.
 **Regla:** la zona **Castellana Real** (Casa 121 CR) aún no ha sido entregada a operaciones y está en etapa de estabilización. Se excluye de todos los reportes y KPI de flota (reporte diario, reportes mensuales, dashboards) hasta que el equipo confirme su entrega. Además de los pilotos (Piloto Promigas y Piloto Huawei), que ya estaban excluidos.
 
 **Dónde está aplicada:** `EXCLUIR_ZONAS` en `om-agency/scripts/reporte_diario.py`. Para reincorporarla, quitar `"CASTELLANA REAL"` de ese conjunto.
+
+## 2026-10-02 — Generación negativa = sistema energizado solo con baterías (sin paneles aún)
+
+**Aplica a:** Monitor de Salud de Flota, Líder de Diagnóstico de Fallas, Generador de Reportes Operativos Periódicos.
+
+**Regla:** un sistema con **generación neta negativa** (consumo del medidor solar − importación + exportación < 0) **no es una falla de medición**. Es un sistema energizado con las baterías en modo respaldo y **sin paneles instalados todavía**, mientras se resuelve la cubierta. Confirmado por el equipo para Casa 412p, 415p y 447p (Prado Verde Primavera), y vale para todo sistema que muestre generación negativa.
+
+**Cómo tratarlos:** se excluyen de generación, cobertura y rendimiento, y no se les abre caso de diagnóstico. **Sí cuentan en el respaldo** (la batería responde a los cortes del OR), y en los reportes se rotulan "sin paneles (obra)". Su SOC alto y plano (97–99 %) es normal en ese modo.
+
+**Corrige:** el reporte mensual de septiembre atribuía esa generación negativa a un posible TC del medidor solar mal cableado (diapositivas ocultas 20–22 del PPTX). Esa hipótesis queda descartada.
+
+**Dónde está aplicada:** `SIN_PANELES` y la detección por generación < 0 en `om-agency/scripts/reporte_diario.py`.

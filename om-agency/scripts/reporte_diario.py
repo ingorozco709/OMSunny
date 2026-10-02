@@ -24,6 +24,9 @@ BOG = dt.timezone(dt.timedelta(hours=-5))
 EXCLUIR = {"Piloto HUAWEI", "Piloto Promigas"}
 # Zonas fuera del analisis: Castellana Real aun no se entrega a operaciones (etapa de estabilizacion).
 EXCLUIR_ZONAS = {"CASTELLANA REAL"}
+# Sistemas energizados solo con baterias en modo respaldo, sin paneles instalados aun (obra pendiente).
+# Ademas de esta lista, todo sistema con generacion neta negativa en la ventana se trata igual.
+SIN_PANELES = {"Casa 412p", "Casa 415p", "Casa 447p"}
 GAP_EVENTO = 15 * 60e3     # cortes del OR mas cercanos que esto forman un solo evento
 PRE, POST = 2 * 60e3, 15 * 60e3
 MIN = 60.0
@@ -531,7 +534,10 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
     if des_med is not None:
         bj = sorted([r for r in res if r["des"] is not None and r["casa"] not in ausentes], key=lambda r: r["des"])[:3]
         pts.append(("none", f"Rendimiento medio {n1(des_med,1)} % del diseño. Menor: " + ", ".join(f"{r['casa']} ({n1(r['des'],0)} %)" for r in bj) + "."))
-    llenas = [r["casa"] for r in res if r.get("soc_min") is not None and r["soc_min"] >= 95]
+    sp = sorted(r["casa"] for r in res if r.get("sin_paneles"))
+    if sp:
+        pts.append(("none", f"{len(sp)} {'sistema energizado' if len(sp) == 1 else 'sistemas energizados'} solo con baterías en modo respaldo (paneles pendientes de instalar): {', '.join(sp)}. No entran en generación ni rendimiento."))
+    llenas = [r["casa"] for r in res if r.get("soc_min") is not None and r["soc_min"] >= 95 and not r.get("sin_paneles")]
     if llenas:
         pts.append(("none", f"{len(llenas)} baterías no bajaron de 95 % en todo el periodo (generación recortada si la casa no consume)."))
     return sorted(pts, key=lambda t: {"crit": 0, "warn": 1, "none": 2, "ok": 3}[t[0]])
@@ -540,6 +546,11 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
 def construir(res, a, b, kwp_tab, ausentes, horas):
     ini = dt.datetime.fromtimestamp(a / 1000, BOG)
     fin = dt.datetime.fromtimestamp(b / 1000, BOG)
+    for r in res:
+        r["sin_paneles"] = r["casa"] in SIN_PANELES or (r.get("gen") is not None and r["gen"] < 0)
+        if r["sin_paneles"]:      # no hay generacion que evaluar; el respaldo si cuenta
+            r["gen"] = None
+            r["dem"] = None
     eventos = [(r, e) for r in res for e in r["eventos"]]
     n_casas = len({r["casa"] for r, e in eventos})
     OR = sum(e["or_s"] for r, e in eventos)
@@ -577,7 +588,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
     corte = b - 2 * 3600e3
     sin_red = [r["casa"] for r in res if (r.get("red_ultimo") or 0) < corte]
     sin_inv = [r["casa"] for r in res if r.get("inv_ultimo") is not None and r["inv_ultimo"] < corte]
-    estado = '<div class="chips2">' + (f'<span><b>{len(res)-len(sin_red)}</b> de {len(res)} medidores de red al día</span><span><b>{len(res)-len(sin_inv)}</b> inversores al día (últimas 2 h)</span>') + ("".join(f"<span>Sin datos de red: {html.escape(c)}</span>" for c in sin_red[:10])) + "</div>"
+    estado = '<div class="chips2">' + (f'<span><b>{len(res)-len(sin_red)}</b> de {len(res)} medidores de red al día</span><span><b>{len(res)-len(sin_inv)}</b> inversores al día (últimas 2 h)</span>') + ("".join(f"<span>Sin datos de red: {html.escape(c)}</span>" for c in sin_red[:10])) + (f'<span>Solo baterías, sin paneles aún: {html.escape(", ".join(sorted(r["casa"] for r in res if r.get("sin_paneles"))))}</span>' if any(r.get("sin_paneles") for r in res) else "") + "</div>"
     # detalle por zona (tablas plegadas)
     zonas = {}
     for r in res:
@@ -594,10 +605,10 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
             if evs:
                 peor = max((res_evento(e) or "ok" for e in evs), key=lambda c: ORDEN[c]) if any(res_evento(e) for e in evs) else "ok"
                 cl, estado_t = peor, ESTADO[peor]
-            filas.append(f"""<tr><td class="casa">{'🧳 ' if r['ausente'] else ''}{html.escape(r['casa'])}<span class="sub">{html.escape(r['marca'])}</span></td>
+            filas.append(f"""<tr><td class="casa">{'🧳 ' if r['ausente'] else ''}{html.escape(r['casa'])}<span class="sub">{html.escape(r['marca'])}{' · sin paneles (obra)' if r.get('sin_paneles') else ''}</span></td>
 <td class="num">{fmt_min(orS) if evs else '—'}</td><td class="num">{fmt_min(clS) if evs else '—'}</td><td class="num">{n1(p,0)+' %' if p is not None else '—'}</td>
 <td><span class="pill {cl}">{estado_t}</span></td><td class="num">{n1(r.get('soc_min'),0) if r.get('soc_min') is not None else '—'}</td>
-<td class="num">{n1(r.get('gen'),1)}</td><td class="num">{(n1(r['des'],0)+' %') if r['des'] is not None else '—'}</td><td class="num">{n1(r.get('exp'),2)}</td></tr>""")
+<td class="num">{'sin paneles' if r.get('sin_paneles') else n1(r.get('gen'),1)}</td><td class="num">{(n1(r['des'],0)+' %') if r['des'] is not None else '—'}</td><td class="num">{n1(r.get('exp'),2)}</td></tr>""")
         sec.append(f'<h3 style="margin:18px 0 6px">{html.escape(zn(z))} · {len(rs)} sistemas</h3><div class="tablewrap"><table><thead><tr><th>Sistema</th><th>Interrup. OR (min)</th><th>Percibida (min)</th><th>% respaldado</th><th>Resultado</th><th>SOC mín. %</th><th>Gen. kWh</th><th>Rend. %</th><th>Export. kWh</th></tr></thead><tbody>{"".join(filas)}</tbody></table></div>')
     titulo = f"Reporte diario O&amp;M · {fin.strftime('%d/%m/%Y')}"
     c_lin = svg_linea(res, a, b, horas)
@@ -629,6 +640,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 <section class="note"><h2 style="font-size:1rem">Notas</h2><ul>
 <li>Generación = demanda − importación + exportación (acumulados de 15 min de los medidores). Rendimiento = generación / kWp frente al yield de diseño del conjunto; solo para los sistemas con kWp en <code>om-agency/data/kwp.json</code>.</li>
 <li>Los cortes del OR separados por menos de 15 min forman un evento; las interrupciones del medidor solar entre 2 min antes y 15 min después se asignan a ese evento.</li>
+<li>Sistemas sin paneles (energizados solo con baterías en modo respaldo mientras se termina la cubierta) quedan fuera de generación, rendimiento y cobertura; su respaldo sí se cuenta.</li>
 <li>🧳 Ausencia del hogar: en los 2 últimos días completos la demanda cayó a la mitad o menos de su nivel habitual (percentil 90 de 14 días) y la generación cayó con ella.</li>
 </ul></section>
 </div>
