@@ -504,7 +504,7 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
         pts.append(("ok", f"Sin interrupciones del OR en las últimas {horas} h en ninguno de los sistemas."))
     else:
         zonas_ev = sorted({zn(r["zona"]) for r, e in eventos})
-        pts.append(("warn" if (efec or 100) < 90 else "ok", f"{len(eventos)} eventos de red en {n_casas} sistemas ({', '.join(zonas_ev)}). Interrupción acumulada {n1(OR/3600,1)} h; respaldo {n1(efec,1) if efec is not None else '—'} %."))
+        pts.append(("warn" if (efec or 100) < 90 else "ok", f"{len(eventos)} {'evento' if len(eventos) == 1 else 'eventos'} de red en {n_casas} {'sistema' if n_casas == 1 else 'sistemas'} ({', '.join(zonas_ev)}). Interrupción acumulada {n1(OR/3600,1)} h; respaldo {n1(efec,1) if efec is not None else '—'} %."))
         peor = sorted([(r, e) for r, e in eventos if res_evento(e) == "crit" and e["or_s"] >= 30], key=lambda t: -(t[1]["cl_s"] or 0))
         for r, e in peor[:3]:
             pts.append(("crit", f"{r['casa']} ({zn(r['zona'])}, {r['marca']}): {fmt_min(e['cl_s'])} min sin energía en un corte del OR de {fmt_min(e['or_s'])} min a las {hora(e['ini'])}" + (f"; entró con SOC {e['soc']:.0f} %." if e["soc"] is not None else ".")))
@@ -523,9 +523,9 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
     sin_red = [r["casa"] for r in res if (r.get("red_ultimo") or 0) < corte]
     sin_inv = [r["casa"] for r in res if r.get("inv_ultimo") is not None and r["inv_ultimo"] < corte]
     if sin_red:
-        pts.append(("crit", f"Sin telemetría del medidor de red hace más de 2 h: {len(sin_red)} sistemas ({', '.join(sin_red[:10])}{'…' if len(sin_red) > 10 else ''})."))
+        pts.append(("crit", f"Sin telemetría del medidor de red hace más de 2 h: {len(sin_red)} {'sistema' if len(sin_red) == 1 else 'sistemas'} ({', '.join(sin_red[:10])}{'…' if len(sin_red) > 10 else ''})."))
     if sin_inv:
-        pts.append(("warn", f"Sin telemetría del inversor hace más de 2 h: {len(sin_inv)} sistemas ({', '.join(sin_inv[:10])}{'…' if len(sin_inv) > 10 else ''})."))
+        pts.append(("warn", f"Sin telemetría del inversor hace más de 2 h: {len(sin_inv)} {'sistema' if len(sin_inv) == 1 else 'sistemas'} ({', '.join(sin_inv[:10])}{'…' if len(sin_inv) > 10 else ''})."))
     if ausentes:
         pts.append(("none", "🧳 Posible ausencia del hogar (consumo y generación caídos): " + ", ".join(sorted(ausentes)) + ". Revisar antes de despachar un técnico."))
     if des_med is not None:
@@ -565,7 +565,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
     li = lambda c, t: f'<li><span class="pill {c}">{ {"ok":"Bien","warn":"Atención","crit":"Crítico","none":"Dato"}[c] }</span><span>{html.escape(t)}</span></li>'
     top_html = '<ul class="top">' + "".join(li(c, t) for c, t in top5) + "</ul>"
     if resto:
-        top_html += f'<details class="mas"><summary>Ver los otros {len(resto)} puntos</summary><ul class="top" style="margin-top:10px">' + "".join(li(c, t) for c, t in resto) + "</ul></details>"
+        top_html += f'<details class="mas"><summary>Ver {"el otro punto" if len(resto) == 1 else f"los otros {len(resto)} puntos"}</summary><ul class="top" style="margin-top:10px">' + "".join(li(c, t) for c, t in resto) + "</ul></details>"
     kpis = f"""<div class="kpis">
 <div class="kpi {'crit' if eventos and (efec or 100) < 50 else 'warn' if eventos and (efec or 100) < 90 else ''}"><b>{len(eventos)}</b><span>Eventos de red en {n_casas} de {len(res)} sistemas</span></div>
 <div class="kpi {clase_p(efec) if efec is not None else ''}"><b>{(n1(efec,1)+' %') if efec is not None else '—'}</b><span>Tiempo respaldado ({n1(OR/3600,1)} h de interrupción del OR sumadas)</span></div>
