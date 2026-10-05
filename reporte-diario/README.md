@@ -10,6 +10,11 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 - Exportación de energía activa (`energyAE` del medidor de red), importación y consumo del lado respaldado.
 - Comunicación: dispositivos con último dato de más de 2 h.
 
+## Qué no incluye
+- Los pilotos (sistemas cuyo nombre contiene "Piloto").
+- Las casas sin generación FV, que por ahora solo tienen instaladas las baterías de respaldo. Se detectan con el contador diario del inversor (`energyPD`): si en los últimos 10 días nunca pasa de 5 kWh/día (con al menos 5 días de datos), la casa se deja fuera de todas las tablas, cifras y puntos relevantes.
+- Para corregir la regla a mano, editar `exclusiones.json`: `"excluir"` saca una casa y `"incluir"` fuerza a incluirla aunque la regla la excluya (por ejemplo una casa que ya recibió sus paneles). El `resumen_diario.json` lista en `excluidos` lo que se dejó fuera y por qué.
+
 ## Uso
 ```
 python3 reporte-diario/reporte_diario.py                       # ventana automática que termina ahora

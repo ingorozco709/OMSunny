@@ -378,6 +378,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>
+    <p>No se incluyen los pilotos ni las casas sin generación FV, que por ahora solo tienen instaladas las baterías de respaldo ({len(EXCLUIDOS)} sistemas fuera del reporte).</p>
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
@@ -385,7 +386,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
 '''
     with open(args.salida, "w", encoding="utf8") as f:
         f.write(pagina)
-    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
+    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
                    pv_kwh=round(pv_total), exp_kwh=round(exp_tot), imp_kwh=round(imp_tot), puntos=[f"{t}: {x}" for n, t, x in P])
     with open(args.json, "w", encoding="utf8") as f:
         json.dump(resumen, f, ensure_ascii=False, indent=1)

@@ -19,6 +19,9 @@ MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 RESERVA = 22.0                        # SOC a partir del cual se considera la batería en reserva (piso típico 20 %)
 GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al evento de red más cercano dentro de este radio
+PV_MIN_KWH = 5.0                      # una casa cuyo inversor nunca pasa de este valor diario (energyPD) no tiene FV instalada: solo baterías de respaldo
+PV_MIN_DIAS = 5                       # días con dato necesarios para decidir que una casa no tiene FV
+EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
 
 # ------------------------------------------------------------------ Metrum
 BASE = os.environ.get("METRUM_API_URL", "").rstrip("/")
@@ -192,6 +195,39 @@ def construir_sistemas(devs, attrs):
         elif dv["type"] == "pulsar":
             s["pul"].append(rec)
     return SYS
+
+def cargar_exclusiones():
+    """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"]} para corregir a mano la regla automática."""
+    ruta = os.path.join(HERE, "exclusiones.json")
+    try:
+        with open(ruta, encoding="utf8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        d = {}
+    norm = lambda L: {str(x).strip().lower() for x in d.get(L, [])}
+    return norm("excluir"), norm("incluir")
+
+def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in):
+    """Devuelve el motivo por el que un sistema no entra al reporte, o None si debe incluirse.
+    - Pilotos (nombre con "Piloto").
+    - Casas sin generación FV: solo tienen las baterías de respaldo instaladas, así que el inversor nunca supera PV_MIN_KWH al día.
+    """
+    nombre = s["casa"].strip().lower()
+    if nombre in manual_in:
+        return None
+    if nombre in manual_ex:
+        return "lista manual"
+    if "piloto" in nombre:
+        return "piloto"
+    dias_dato = {}
+    for r in s["inv"]:
+        for d0 in range(d_ini, d_fin, 86400000):
+            v = [x for t, x in HPD.get(r["id"], []) if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
+            if v:
+                dias_dato[d0] = max(dias_dato.get(d0, 0.0), max(v) / 1000)
+    if len(dias_dato) >= PV_MIN_DIAS and max(dias_dato.values()) <= PV_MIN_KWH:
+        return "sin generación FV (solo baterías)"
+    return None
 
 def ordenar_ciudad(c):
     o = ["CALI", "TURBACO", "BARRANQUILLA", "CARTAGENA"]
@@ -381,6 +417,22 @@ def main():
     with cf.ThreadPoolExecutor(8) as ex:
         attrs = {dv["id"]["id"]: a for dv, a in ex.map(atributos, devs)}
     SYS = construir_sistemas(devs, attrs)
+    # histórico de generación FV (9 días): patrón propio de cada casa y detección de casas sin FV
+    HPD = {}
+    h0 = ts_bog(ini.year, ini.month, ini.day) - 9 * 86400000
+    tareas2 = [(r["id"], "energyPD", h0, W1 + 600000) for s in SYS.values() for r in s["inv"]]
+    with cf.ThreadPoolExecutor(8) as ex:
+        for i, d in ex.map(lambda t: serie(*t), tareas2):
+            HPD[i] = S(d, "energyPD")
+    # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV)
+    manual_ex, manual_in = cargar_exclusiones()
+    EXCLUIDOS.clear()
+    for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
+        m = motivo_exclusion(SYS[k], HPD, h0, dias[-1][1], manual_ex, manual_in)
+        if m:
+            EXCLUIDOS.append((k[0], SYS[k]["casa"], m))
+    for ciudad, casa, _ in EXCLUIDOS:
+        del SYS[(ciudad, casa)]
     # telemetría
     IK = "invrun,invstate,voltGridA,voltGridB,voltGridC,BattSOC,BattPower,energyPD,activityState,event"
     MR = "event,voltageA,activityState,FlagStaProf,energyAE,energyAI,powerAI"
@@ -396,13 +448,6 @@ def main():
     with cf.ThreadPoolExecutor(8) as ex:
         for i, d in ex.map(lambda t: serie(*t), tareas):
             D[i] = d
-    # histórico de generación FV (9 días) para comparar con el patrón propio
-    HPD = {}
-    h0 = ts_bog(ini.year, ini.month, ini.day) - 9 * 86400000
-    tareas2 = [(r["id"], "energyPD", h0, W1 + 600000) for s in SYS.values() for r in s["inv"]]
-    with cf.ThreadPoolExecutor(8) as ex:
-        for i, d in ex.map(lambda t: serie(*t), tareas2):
-            HPD[i] = S(d, "energyPD")
     # análisis
     RS = []
     for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
