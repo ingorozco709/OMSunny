@@ -16,6 +16,7 @@ Metodo (mismo del reporte mensual):
   * Exportacion activa      = energyAE del medidor de red.
 Se excluyen "Piloto Promigas", "Piloto Huawei" y la zona Castellana Real (aun no entregada a operaciones).
 """
+import re
 import argparse, datetime as dt, html, json, os, statistics as st, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -259,6 +260,7 @@ XTRA_CSS = """
 .ax{fill:var(--muted);font:12px var(--body)} .lb{fill:var(--fg);font:13px var(--body)} .lb2{fill:var(--ink2);font:12px var(--body)} .vl{fill:var(--fg);font:600 13px var(--body)}
 .gl{stroke:var(--grid);stroke-width:1} .ba{stroke:var(--axis);stroke-width:1}
 .m-ok{fill:var(--gd)} .m-warn{fill:var(--wn)} .m-crit{fill:var(--cr)} .c1{fill:var(--s1)} .c2{fill:var(--s2)}
+td.tp{cursor:help;text-decoration:underline dotted var(--muted);text-underline-offset:4px}
 [data-tip]{cursor:default} [data-tip]:hover,[data-tip]:focus{outline:none;filter:brightness(1.12)}
 #tip{position:fixed;z-index:50;pointer-events:none;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:.82rem;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:340px}
 #tip .t0{font-weight:600;margin-bottom:2px} #tip[hidden]{display:none}
@@ -578,6 +580,22 @@ def cortes_zona(eventos):
     return sorted(out, key=lambda c: c["ini"])
 
 
+def hm(t):
+    return dt.datetime.fromtimestamp(t / 1000, BOG).strftime("%H:%M")
+
+
+def clave_casa(c):
+    return [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", c)]
+
+
+def lista_sistemas(its):
+    """Texto por zona con los nombres de los sistemas (sin el prefijo 'Casa ')."""
+    por_z = {}
+    for r_, e_ in its:
+        por_z.setdefault(r_["zona"], set()).add(r_["casa"])
+    return [f"{zn(z)} ({len(cs)}): " + ", ".join(c.replace("Casa ", "") for c in sorted(cs, key=clave_casa)) for z, cs in sorted(por_z.items(), key=lambda x: (-len(x[1]), x[0]))]
+
+
 def html_por_dia(eventos):
     """Resumen por dia y lista de cortes de zona para ventanas de varios dias."""
     if not eventos:
@@ -598,7 +616,9 @@ def html_por_dia(eventos):
         socs = [(e["soc"], r["casa"]) for r, e in its if e["soc"] is not None]
         piso = sorted({c for v, c in socs if v <= 21})
         mx = max(cz, key=lambda c: c["dur"])
-        filas.append(f'<tr><td class="strong">{sem[d.weekday()]} {d.strftime("%d/%m")}</td><td class="num">{len(cz)}</td><td class="num">{len({r["casa"] for r, e in its})}</td>'
+        tip_cz = tip(f"{sem[d.weekday()]} {d.strftime('%d/%m')} · {len(cz)} cortes de zona", *[f"{zn(c['zona'])} · {hm(c['ini'])}–{hm(c['fin'])} · {fmt_min(c['dur'])} min · {c['n']} sist." for c in cz])
+        tip_si = tip(f"{sem[d.weekday()]} {d.strftime('%d/%m')} · {len({r['casa'] for r, e in its})} sistemas afectados", "Casas por zona:", *lista_sistemas(its))
+        filas.append(f'<tr><td class="strong">{sem[d.weekday()]} {d.strftime("%d/%m")}</td><td class="num tp" data-tip="{tip_cz}" tabindex="0">{len(cz)}</td><td class="num tp" data-tip="{tip_si}" tabindex="0">{len({r["casa"] for r, e in its})}</td>'
                      f'<td class="num">{n1(OR/3600,1)} h</td><td class="num">{n1(pct,1)+" %" if pct is not None else "—"}</td>'
                      f'<td class="num">{k["ok"]} · {k["warn"]} · {k["crit"]}</td><td class="num">{len(piso)}</td>'
                      f'<td class="num">{n1(min(v for v, c in socs),0)+" %" if socs else "—"}</td>'
@@ -610,7 +630,9 @@ def html_por_dia(eventos):
     fc = []
     for c in sorted(rel, key=lambda c: c["ini"]):
         cl = "crit" if c["res"]["crit"] else "warn" if c["res"]["warn"] else "ok"
-        fc.append(f'<tr><td class="num">{hora(c["ini"])} – {hora(c["fin"])[-5:]}</td><td>{html.escape(zn(c["zona"]))}</td><td class="num">{fmt_min(c["dur"])} min</td><td class="num">{c["n"]}</td>'
+        lin = [f"{r_['casa']}: {ESTADO.get(res_evento(e_), 'sin dato')}, SOC al inicio {n1(e_['soc'], 0) if e_['soc'] is not None else '—'} %" for r_, e_ in sorted(c["items"], key=lambda x: clave_casa(x[0]["casa"]))][:30]
+        tip_n = tip(f"{zn(c['zona'])} · {hm(c['ini'])}–{hm(c['fin'])} · {c['n']} sistemas", *lin)
+        fc.append(f'<tr><td class="num">{hora(c["ini"])} – {hora(c["fin"])[-5:]}</td><td>{html.escape(zn(c["zona"]))}</td><td class="num">{fmt_min(c["dur"])} min</td><td class="num tp" data-tip="{tip_n}" tabindex="0">{c["n"]}</td>'
                   f'<td class="num">{n1(c["pct"],0)+" %" if c["pct"] is not None else "—"}</td>'
                   f'<td><span class="pill {cl}">{c["res"]["ok"]} OK · {c["res"]["warn"]} parc. · {c["res"]["crit"]} fallo</span></td>'
                   f'<td class="num">{n1(c["soc_min"],0) if c["soc_min"] is not None else "—"} % / {n1(c["soc_med"],0) if c["soc_med"] is not None else "—"} %</td>'
@@ -621,7 +643,7 @@ def html_por_dia(eventos):
             '<th>SOC al inicio (mín. / mediana)</th><th>SOC mín. durante el corte</th><th>Baterías en el piso (≤ 21 %) durante el corte</th><th>Sin respaldo completo</th></tr></thead><tbody>' + "".join(fc) + '</tbody></table></div>')
     nota = f'<p class="note">{menores} cortes de zona menores a 5 min, sin falla de respaldo y sin baterías en el piso, no se listan; están en el detalle por sistema.</p>' if menores else ""
     return (f'<section><h2>Interrupciones por día</h2><p>Un corte de zona agrupa los sistemas de la misma zona cuyo corte empezó con menos de 10 min de diferencia. '
-            f'Cada evento se cuenta en el día en que empezó. SOC = estado de carga de la batería al inicio del corte.</p>{t_dia}'
+            f'Cada evento se cuenta en el día en que empezó. SOC = estado de carga de la batería al inicio del corte. Pasa el cursor sobre los números de cortes y sistemas para ver cuáles son.</p>{t_dia}'
             f'<h3 style="margin:14px 0 6px;font:600 1.05rem var(--display)">Cortes de zona relevantes</h3>{t_cz}{nota}</section>')
 
 
