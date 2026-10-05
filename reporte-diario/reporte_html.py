@@ -106,12 +106,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     # ------------------------------------------------ comunicación (último dato de cada dispositivo)
     stale = []
     for R in RS:
-        for k, nom in (("inv", "inversor"), ("red", "medidor de red"), ("solar", "medidor solar"), ("gw", "gateway")):
+        for k, nom in (("inv", "inversor"), ("red", "medidor de red"), ("solar", "medidor solar")):
             t = R["ult"].get(k)
             if t is None:
                 continue
             if W1 - t > 2 * 3600000:
                 stale.append((R, nom, t))
+        if R["gw"] and R["gw"][1] == "offline":
+            stale.append((R, "gateway (offline)", R["gw"][0]))
     sin_datos_inv = [R for R in RS if R["ult"]["inv"] is None or W1 - R["ult"]["inv"] > 2 * 3600000]
 
     # ------------------------------------------------ puntos relevantes
@@ -276,7 +278,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     rows = []
     for R, nom, t in sorted(stale, key=lambda x: x[2]):
         rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(R["sys"]["ciudad"].title())}</small></td><td>{nom}</td><td>{hbd(t)}</td><td class="n">{fmt((W1 - t) / 1000)}</td></tr>')
-    sec_com = tabla('<th>Sistema</th><th>Dispositivo</th><th>Último dato</th><th class="n">Hace</th>', rows, 520) if rows else '<p class="note">Todos los dispositivos con datos reportaron en las últimas 2 h.</p>'
+    sec_com = tabla('<th>Sistema</th><th>Dispositivo</th><th>Último dato / offline desde</th><th class="n">Hace</th>', rows, 520) if rows else '<p class="note">Todos los medidores e inversores reportaron en las últimas 2 h y ningún gateway está offline.</p>'
 
     # resumen por ciudad
     rows = []

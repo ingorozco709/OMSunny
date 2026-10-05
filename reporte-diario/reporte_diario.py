@@ -227,7 +227,10 @@ def analizar(s, D, W0, W1, dias):
     s["cap"] = num(inv["attrs"].get("invcap")) if inv else None
     R = dict(sys=s, inv_name=inv["name"] if inv else None)
     # --- comunicación
-    R["ult"] = dict(inv=t_inv if t_inv > 0 else None, red=t_red if t_red > 0 else None, solar=t_sol if t_sol > 0 else None, gw=t_pu if t_pu > 0 else None)
+    R["ult"] = dict(inv=t_inv if t_inv > 0 else None, red=t_red if t_red > 0 else None, solar=t_sol if t_sol > 0 else None)
+    # el gateway solo registra cambios de estado (online/offline), no una muestra periódica
+    gwa = S(dp, "activityState")
+    R["gw"] = gwa[-1] if gwa else None
     # --- batería
     soc = [(t, v) for t, v in S(di, "BattSOC") if isinstance(v, float)]
     soc = [(t, v) for i, (t, v) in enumerate(soc) if not (v == 0.0 and 0 < i < len(soc) - 1 and soc[i-1][1] > 10 and soc[i+1][1] > 10)]
