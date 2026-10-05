@@ -193,3 +193,15 @@ ingerir `voltageA` del medidor.
 **Corrige:** el reporte mensual de septiembre atribuía esa generación negativa a un posible TC del medidor solar mal cableado (diapositivas ocultas 20–22 del PPTX). Esa hipótesis queda descartada.
 
 **Dónde está aplicada:** `SIN_PANELES` y la detección por generación < 0 en `om-agency/scripts/reporte_diario.py`.
+
+## 2026-10-05 — Ausencia del hogar: validar siempre el consumo del cliente y mantener el estado de cada casa
+
+**Aplica a:** Monitor de Salud de Flota, Generador de Reportes Operativos Periódicos, Líder de Diagnóstico de Fallas.
+
+**Regla:** para decir que una casa tiene posible ausencia (🧳) se **valida el consumo del cliente** (demanda diaria del medidor solar) frente a su nivel habitual, no solo la generación: con la batería llena y sin inyección el inversor recorta la generación al consumo, así que una generación baja sin consumo bajo no indica ausencia. Se compara con la **mediana de los últimos 30 días** (la mediana no se infla con días de carga de carro eléctrico). **2 o más días completos seguidos en 50 % o menos** → posible ausencia; **2 días seguidos en 75 % o más** → vuelve a presente.
+
+**Estado persistente:** el estado de cada casa se guarda en `om-agency/data/estado_casas.json` y se actualiza en cada ejecución del reporte diario (estados: `posible_ausencia`, `ausente_confirmada`, `posible_regreso`, `presente`). Las ausencias **confirmadas por una persona** (ejemplo: Casa 104, confirmada el 01/10) no se borran solas: si el consumo se normaliza pasan a `posible_regreso` para validar. Antes de despachar un técnico a una casa marcada, confirmar con el cliente.
+
+**Dónde está aplicada:** `evaluar_consumo()` y `actualizar_estados()` en `om-agency/scripts/reporte_diario.py`; sección "Estado de las casas" del reporte.
+
+**Corrige:** la regla del 01/10 (demanda ≤ 50 % del percentil 90 de 14 días y generación ≤ 70 %), que se inflaba con días de carro eléctrico y marcaba casas con consumo normal (Casa 18PR, 10 y 99 en el reporte del 05/10).

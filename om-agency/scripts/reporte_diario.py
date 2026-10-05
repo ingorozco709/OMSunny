@@ -227,6 +227,75 @@ def procesar(h, a, b, hoy0, dias):
     return r
 
 
+ESTADO_PATH = os.path.join(HERE, "..", "data", "estado_casas.json")
+UMBRAL_AUSENCIA, UMBRAL_REGRESO, RACHA_MIN = 0.5, 0.75, 2
+
+
+def cargar_estados():
+    try:
+        return json.load(open(ESTADO_PATH, encoding="utf-8"))
+    except Exception:
+        return {"casas": {}}
+
+
+def evaluar_consumo(dem):
+    """Valida el consumo del cliente: demanda diaria (medidor solar) frente a su nivel habitual.
+    Habitual = mediana de los dias previos a los 3 ultimos (la mediana no se infla con dias de carga de carro electrico). Racha = dias completos seguidos con
+    consumo <= 50 % del habitual. Devuelve None si no hay historia suficiente."""
+    ref = [x for x in dem[:-3] if x is not None]
+    if len(ref) < 10:
+        return None
+    base = st.median(ref)
+    if base < 2:      # consumo habitual muy bajo: no hay base para comparar
+        return dict(base=base, racha=0, ult=[None if x is None else round(x, 1) for x in dem[-7:]], regreso=False, bajo=True)
+    racha = 0
+    for x in reversed(dem):
+        if x is not None and x <= UMBRAL_AUSENCIA * base:
+            racha += 1
+        else:
+            break
+    reg = sum(1 for x in dem[-2:] if x is not None and x >= UMBRAL_REGRESO * base) == 2
+    return dict(base=base, racha=racha, ult=[None if x is None else round(x, 1) for x in dem[-7:]], regreso=reg, bajo=False)
+
+
+def actualizar_estados(res, hist, dias):
+    """Actualiza el estado de cada casa a partir del consumo. Los estados confirmados por una persona
+    (ausente_confirmada) no se borran solos: si el consumo se normaliza se marca 'posible_regreso'."""
+    est = cargar_estados()
+    casas = est.setdefault("casas", {})
+    ult_dia = dias[-1] - dt.timedelta(days=1)       # ultimo dia completo
+    hoy = dias[-1].date()
+    cambios = []
+    for r_, hh in zip(res, hist):
+        if not hh:
+            continue
+        ev = evaluar_consumo(hh["dem"])
+        c = casas.get(r_["casa"])
+        if ev is None:
+            continue
+        base, racha = round(ev["base"], 1), ev["racha"]
+        if c is None and racha >= RACHA_MIN:
+            desde = (ult_dia - dt.timedelta(days=racha - 1)).date().isoformat()
+            casas[r_["casa"]] = c = dict(estado="posible_ausencia", desde=desde, nota="Detectada por consumo; validar con el cliente.")
+            cambios.append(f"{r_['casa']}: posible ausencia desde {desde}")
+        elif c is not None:
+            if c["estado"] == "posible_ausencia" and ev["regreso"]:
+                c["estado"] = "presente"; c["hasta"] = hoy.isoformat()
+                cambios.append(f"{r_['casa']}: consumo normalizado, vuelve a presente")
+            elif c["estado"] == "ausente_confirmada" and ev["regreso"]:
+                c["estado"] = "posible_regreso"; c["regreso_detectado"] = hoy.isoformat()
+                cambios.append(f"{r_['casa']}: ausencia confirmada, pero el consumo se normalizó; validar regreso")
+            elif c["estado"] == "posible_regreso" and racha >= RACHA_MIN:
+                c["estado"] = "ausente_confirmada"; c.pop("regreso_detectado", None)
+            elif c["estado"] == "presente" and racha >= RACHA_MIN:
+                c["estado"] = "posible_ausencia"; c["desde"] = (ult_dia - dt.timedelta(days=racha - 1)).date().isoformat(); c.pop("hasta", None)
+                cambios.append(f"{r_['casa']}: posible ausencia desde {c['desde']}")
+        if c is not None:
+            c.update(consumo_habitual_kwh=base, consumo_ultimos_7_dias_kwh=ev["ult"], racha_dias_bajos=racha, validado=hoy.isoformat())
+    est["actualizado"] = dt.datetime.now(BOG).isoformat(timespec="minutes")
+    return est, cambios
+
+
 def historial(h, hoy0, dias, kwp):
     """Cierres diarios (14 dias) para desempeno de 7 dias y regla de ausencia del hogar."""
     red = [x for x in h["hijos"] if x["mettype"] == "red"]
@@ -539,7 +608,7 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
     if sin_inv:
         pts.append(("warn", f"Sin telemetría del inversor hace más de 2 h: {len(sin_inv)} {'sistema' if len(sin_inv) == 1 else 'sistemas'} ({', '.join(sin_inv[:10])}{'…' if len(sin_inv) > 10 else ''})."))
     if ausentes:
-        pts.append(("none", "🧳 Posible ausencia del hogar (consumo y generación caídos): " + ", ".join(sorted(ausentes)) + ". Revisar antes de despachar un técnico."))
+        pts.append(("none", "🧳 Casas con ausencia confirmada o posible por consumo bajo: " + ", ".join(sorted(ausentes, key=clave_casa)) + ". Validar con el cliente antes de despachar un técnico (detalle en Estado de las casas)."))
     if des_med is not None:
         bj = sorted([r for r in res if r["des"] is not None and r["casa"] not in ausentes], key=lambda r: r["des"])[:3]
         pts.append(("none", f"Rendimiento medio {n1(des_med,1)} % del diseño. Menor: " + ", ".join(f"{r['casa']} ({n1(r['des'],0)} %)" for r in bj) + "."))
@@ -647,7 +716,39 @@ def html_por_dia(eventos):
             f'<h3 style="margin:14px 0 6px;font:600 1.05rem var(--display)">Cortes de zona relevantes</h3>{t_cz}{nota}</section>')
 
 
-def construir(res, a, b, kwp_tab, ausentes, horas):
+def html_estado_casas(estados, cambios):
+    """Tabla de casas que no estan en estado 'presente', con el consumo que sustenta cada estado."""
+    casas = (estados or {}).get("casas", {})
+    ETQ = {"ausente_confirmada": ("none", "Ausencia confirmada"), "posible_ausencia": ("warn", "Posible ausencia"), "posible_regreso": ("warn", "Posible regreso")}
+    filas = []
+    for nombre in sorted(casas, key=clave_casa):
+        c = casas[nombre]
+        if c["estado"] not in ETQ:
+            continue
+        cl, et = ETQ[c["estado"]]
+        ult = c.get("consumo_ultimos_7_dias_kwh") or []
+        cons = " · ".join("—" if x is None else n1(x, 1) for x in ult)
+        desde = c.get("desde", "")
+        dias_ = ""
+        if desde:
+            dias_ = f'{(dt.datetime.now(BOG).date() - dt.date.fromisoformat(desde)).days} d'
+        validar = {"posible_ausencia": "Confirmar con el cliente antes de despachar un técnico.", "ausente_confirmada": c.get("fuente", "Confirmada."), "posible_regreso": "El consumo volvió a su nivel habitual: confirmar el regreso."}[c["estado"]]
+        filas.append(f'<tr><td class="casa">{html.escape(nombre)}</td><td><span class="pill {cl}">{et}</span></td><td class="num">{html.escape(desde[8:10] + "/" + desde[5:7]) if desde else "—"}<span class="sub">{dias_}</span></td>'
+                     f'<td class="num">{n1(c.get("consumo_habitual_kwh"),1) if c.get("consumo_habitual_kwh") is not None else "—"}</td><td class="num">{cons}</td><td class="num">{c.get("racha_dias_bajos", "—")}</td>'
+                     f'<td class="obs">{html.escape(validar)}</td><td class="num">{html.escape(c.get("validado", "—"))}</td></tr>')
+    cab = ""
+    if cambios:
+        cab = '<p class="note">Cambios de hoy: ' + html.escape("; ".join(cambios)) + ".</p>"
+    if not filas:
+        return f'<section><h2>Estado de las casas</h2><p>Todas las casas muestran consumo normal frente a su nivel habitual.</p>{cab}</section>'
+    return ('<section><h2>Estado de las casas</h2><p>Se valida cada día el consumo del cliente (medidor solar) frente a su nivel habitual de los últimos 30 días. '
+            'Con 2 o más días completos en 50 % o menos se marca como posible ausencia; con consumo normal 2 días seguidos se quita. '
+            'Las ausencias confirmadas por operaciones no se borran solas.</p>'
+            '<div class="tablewrap"><table style="min-width:900px"><thead><tr><th>Casa</th><th>Estado</th><th>Desde</th><th>Consumo habitual (kWh/día)</th><th>Últimos 7 días (kWh/día)</th><th>Días seguidos bajos</th><th>Qué hacer</th><th>Validado</th></tr></thead><tbody>'
+            + "".join(filas) + f'</tbody></table></div>{cab}</section>')
+
+
+def construir(res, a, b, kwp_tab, ausentes, horas, estados=None, cambios=()):
     ini = dt.datetime.fromtimestamp(a / 1000, BOG)
     fin = dt.datetime.fromtimestamp(b / 1000, BOG)
     for r in res:
@@ -726,6 +827,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
         sec.append(f'<h3 style="margin:18px 0 6px">{html.escape(zn(z))} · {len(rs)} sistemas</h3><div class="tablewrap"><table><thead><tr><th>Sistema</th><th>Hora del corte</th><th>Interrup. OR (min)</th><th>Percibida (min)</th><th>% respaldado</th><th>Resultado</th><th>SOC mín. %</th><th>Gen. kWh</th><th>Rend. %</th><th>Export. kWh</th></tr></thead><tbody>{"".join(filas)}</tbody></table></div>')
     titulo = f"Reporte diario O&amp;M · {fin.strftime('%d/%m/%Y')}"
     por_dia_html = html_por_dia(eventos) if horas > 24 else ""
+    estado_casas_html = html_estado_casas(estados, cambios)
     c_lin = svg_linea(res, a, b, horas)
     c_resp = svg_respaldo(res)
     c_rend = svg_rendimiento(res, ausentes)
@@ -742,6 +844,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 </header>
 {kpis}
 <section><h2>Lo más importante</h2>{top_html}</section>
+{estado_casas_html}
 {por_dia_html}
 <section><h2>Interrupciones de la red</h2>
 <div class="chart"><h3>Cuándo se cayó la red, por zona</h3><p class="sub2">Cada marca es un corte del OR. El color es el peor resultado entre los sistemas afectados (el detalle está al pasar el cursor).</p>{c_lin}</div>
@@ -757,7 +860,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 <li>Generación = demanda − importación + exportación (acumulados de 15 min de los medidores). Rendimiento = generación / kWp frente al yield de diseño del conjunto; solo para los sistemas con kWp en <code>om-agency/data/kwp.json</code>.</li>
 <li>Los cortes del OR separados por menos de 15 min forman un evento; las interrupciones del medidor solar entre 2 min antes y 15 min después se asignan a ese evento.</li>
 <li>Sistemas sin paneles (energizados solo con baterías en modo respaldo mientras se termina la cubierta) quedan fuera de generación, rendimiento y cobertura; su respaldo sí se cuenta.</li>
-<li>🧳 Ausencia del hogar: en los 2 últimos días completos la demanda cayó a la mitad o menos de su nivel habitual (percentil 90 de 14 días) y la generación cayó con ella.</li>
+<li>🧳 Ausencia del hogar: se valida el consumo del cliente (medidor solar). Con 2 o más días completos en 50 % o menos de su nivel habitual (mediana de 30 días) pasa a posible ausencia; con 2 días seguidos en 75 % o más vuelve a presente. El estado de cada casa se guarda en <code>om-agency/data/estado_casas.json</code>; las ausencias confirmadas por operaciones no se borran solas.</li>
 </ul></section>
 </div>
 {TIP_JS}"""
@@ -777,7 +880,7 @@ def main():
     b = int(ahora.timestamp() // 900 * 900 * 1000)
     a = b - args.horas * 3600 * 1000
     hoy0 = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    dias = [hoy0 - dt.timedelta(days=i) for i in range(14, -1, -1)]   # 15 cierres -> 14 dias completos
+    dias = [hoy0 - dt.timedelta(days=i) for i in range(30, -1, -1)]   # 31 cierres -> 30 dias completos
     kwp_tab = json.load(open(os.path.join(HERE, "..", "data", "kwp.json"), encoding="utf-8"))
     flota = cargar_flota()
     print(f"Flota: {len(flota)} sistemas", file=sys.stderr)
@@ -785,9 +888,9 @@ def main():
         res = list(ex.map(lambda h: procesar(h, a, b, hoy0, dias), flota))
         hist = list(ex.map(lambda h: historial(h, hoy0, dias, kwp_tab), flota))
     # desempeno 7 dias y regla de ausencia (usa el portafolio del dia para normalizar el clima)
-    pg = [sum((hh["gen"][i] or 0) for hh in hist if hh) for i in range(14)]
+    ND = len(dias) - 1
+    pg = [sum((hh["gen"][i] or 0) for hh in hist if hh) for i in range(ND)]
     pmed = st.median([x for x in pg if x]) if any(pg) else None
-    ausentes = set()
     for r, hh in zip(res, hist):
         if not hh:
             continue
@@ -795,18 +898,12 @@ def main():
         g7 = [x for x in hh["gen"][-7:] if x is not None]
         if k and len(g7) >= 5:
             r["des7"] = 100 * (sum(g7) / len(g7) * 365 / k["kwp"]) / k["yield_diseno"]
-        dm = [x for x in hh["dem"] if x]
-        gm = [x for x in hh["gen"] if x]
-        if len(dm) >= 8 and len(gm) >= 8 and pmed:
-            md, mg = pct90(dm), pct90(gm)
-            malos = 0
-            for i in (-1, -2):
-                d, g = hh["dem"][i], hh["gen"][i]
-                if d is not None and g is not None and pg[i] and d <= 0.5 * md and (g / mg) / (pg[i] / pmed) <= 0.7:
-                    malos += 1
-            if malos == 2:
-                ausentes.add(r["casa"])
-    page, resumen = construir(res, a, b, kwp_tab, ausentes, args.horas)
+    estados, cambios = actualizar_estados(res, hist, dias)
+    ausentes = {c for c, v in estados["casas"].items() if v["estado"] in ("posible_ausencia", "ausente_confirmada", "posible_regreso")}
+    json.dump(estados, open(ESTADO_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1, sort_keys=True)
+    for c in cambios:
+        print("ESTADO:", c, file=sys.stderr)
+    page, resumen = construir(res, a, b, kwp_tab, ausentes, args.horas, estados, cambios)
     open(args.out, "w", encoding="utf-8").write(page)
     print(f"HTML: {args.out}")
     print("RESUMEN")
