@@ -205,3 +205,23 @@ ingerir `voltageA` del medidor.
 **Dónde está aplicada:** `evaluar_consumo()` y `actualizar_estados()` en `om-agency/scripts/reporte_diario.py`; sección "Estado de las casas" del reporte.
 
 **Corrige:** la regla del 01/10 (demanda ≤ 50 % del percentil 90 de 14 días y generación ≤ 70 %), que se inflaba con días de carro eléctrico y marcaba casas con consumo normal (Casa 18PR, 10 y 99 en el reporte del 05/10).
+
+## 2026-10-05 — Respaldo: clasificar el tiempo sin respaldo según el SOC al interrumpirse (batería sin carga vs. falla de transición)
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Líder de Diagnóstico de Fallas.
+
+**Regla:** al calcular el respaldo (INIC 4, reporte diario o cualquier análisis de cortes de red) hay que **tener en cuenta el SOC de cada sistema al momento de la interrupción**, para saber si la casa se quedó sin energía porque **la batería no tenía carga (consumo del cliente)** o porque hubo **una falla o una demora en la transición a OFF-GRID**. El % de respaldo del INIC 4 no cambia (sigue siendo (T_red − T_solar) / T_red, ponderado por tiempo, eventos > 2 min); lo que se agrega es la **causa del tiempo sin respaldo**.
+
+**Cómo se clasifica** (cada apagón de la casa durante un corte de red, medidor solar sin tensión; el SOC del inversor se lee cada 15 min):
+1. SOC ≤ 21 % al apagarse la casa (o en los 15 min alrededor) → **batería sin carga**.
+2. Con SOC mayor, por el momento del apagón: primeros 3 min del corte → **demora o falla en la transición a OFF-GRID**; últimos 90 s del corte (o después) → **demora en el retorno a la red**; entre ambos → **falla del inversor durante el corte**.
+3. Casa ya sin energía antes del corte de red o sin lectura de SOC → **no atribuible**.
+El resultado es estable al variar el umbral de SOC (20–30 %), la ventana de inicio (2–5 min) y la de retorno (1–2 min).
+
+**Cómo reportarlo:** junto al % de respaldo, mostrar las horas y los puntos del T_red por causa y el "INIC 4 sin pérdidas por batería sin carga" **solo como referencia** (no reemplaza al indicador). Las casas con batería sin carga se atienden con reserva mínima de SOC / autonomía; las de transición, con el fabricante (Deye, Livoltek) con la hora, el SOC y el modelo.
+
+**Septiembre 2026 (38 sistemas en operación plena):** INIC 4 94,8 %; de los 5,5 h sin respaldo, 4,5 h (81 %) fueron batería sin carga (Casa 12 4,1 h; también Casas 23, 93p, 15p y 102p) y 1,0 h falla o demora de transición (9 casas Livoltek se apagaron 2 min 35 s al inicio del corte del 29/09 con SOC 82–100 %; Casas 42 y 56 se apagaron 8 min a mitad de ese corte con SOC 100 %; apagones de 13–35 s al volver la red en 31 casas). Sin pérdidas por batería sin carga el indicador sería 99,0 %. Con los 46 sistemas del Excel de soporte: 95,1 % y 98,7 %.
+
+**Corrige:** el conteo previo de "10 de 15 casas Livoltek con la caída de 2 min 35 s al inicio": son 9; la décima (Casa 56) tuvo una caída de 8 min a mitad del corte.
+
+**Dónde está aplicada:** `clasificar_evento()` (y `PISO_SOC`, `T_INICIO`, `T_FIN`, `CAUSAS`) en `om-agency/scripts/reporte_diario.py`; `om-agency/scripts/indicador_inic4.py` (columnas por causa en el Excel, bloque "Tiempo sin respaldo según el SOC" y resumen por zona).

@@ -31,6 +31,21 @@ SIN_PANELES = {"Casa 412p", "Casa 415p", "Casa 447p"}
 GAP_EVENTO = 15 * 60e3     # cortes del OR mas cercanos que esto forman un solo evento
 PRE, POST = 2 * 60e3, 15 * 60e3
 MIN = 60.0
+# Clasificacion del tiempo sin respaldo segun el SOC (regla del 05/10/2026): una casa que se queda sin energia
+# durante un corte de red puede deberse a bateria sin carga (consumo del cliente) o a falla/demora del equipo.
+PISO_SOC = 21.0            # % : bateria en el piso de descarga al apagarse la casa
+T_INICIO, T_FIN = 180.0, 90.0   # s : ventana de transicion a OFF-GRID (inicio del corte) y de retorno a la red (final)
+CAUSAS = {
+    "soc_bajo": "Batería sin carga (SOC ≤ 21 % al apagarse la casa)",
+    "inicio": "Demora o falla en la transición a OFF-GRID (primeros 3 min, SOC suficiente)",
+    "medio": "Falla del inversor durante el corte (SOC suficiente)",
+    "fin": "Demora en el retorno a la red (últimos 90 s del corte, SOC suficiente)",
+    "previo": "Casa ya sin energía antes del corte de red",
+    "sin_dato": "Sin lectura de SOC",
+}
+CAUSAS_TRANSICION = ("inicio", "medio", "fin")   # falla o demora del equipo con SOC suficiente
+ETIQ_CAUSA = {"soc_bajo": "batería sin carga", "inicio": "demora o falla en la transición a OFF-GRID", "medio": "falla durante el corte",
+              "fin": "demora en el retorno a la red", "previo": "ya sin energía antes del corte", "sin_dato": "sin lectura de SOC"}
 
 # ---------------------------------------------------------------- API
 BASE = os.environ.get("METRUM_API_URL", "https://monitoreo-metrum.com").rstrip("/")
@@ -217,7 +232,8 @@ def procesar(h, a, b, hoy0, dias):
         clS = sumar(cl, i0 - PRE, i1 + POST) if sol_d else None
         s0 = [v for t, v in soc if i0 - 30 * MIN * 1000 <= t <= i0]
         sd = [v for t, v in soc if i0 <= t <= i1 + 15 * MIN * 1000]
-        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), soc_dur=(min(sd) if sd else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b), cl_iv=[x for x in cl if x[1] > i0 - PRE])
+        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), soc_dur=(min(sd) if sd else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b), cl_iv=[x for x in cl if x[1] > i0 - PRE],
+                 soc_pts=[[t, v] for t, v in soc if i0 - 30 * MIN * 1000 <= t <= i1 + 30 * MIN * 1000])
         e["bk_s"] = None if clS is None else max(0.0, orS - clS)
         e["excede"] = None if clS is None else clS > orS
         r["eventos"].append(e)
@@ -225,6 +241,80 @@ def procesar(h, a, b, hoy0, dias):
     usados = [x for g in grupos for x in si if x[1] > g[0][0] - PRE and x[0] < g[-1][1] + POST]
     r["solo_cliente"] = [x for x in si if x not in usados and a <= x[0] <= b]
     return r
+
+
+def soc_en(pts, t, tol=20 * MIN * 1000):
+    """Ultimo SOC leido hasta el instante t (no mas viejo que tol)."""
+    c = [(ts, v) for ts, v in pts if ts <= t]
+    return c[-1][1] if c and t - c[-1][0] <= tol else None
+
+
+def clasificar_evento(e):
+    """Reparte el tiempo sin energia en la casa durante un corte de red (el que resta al respaldo, es decir
+    min(T_red, T_solar)) segun el SOC y el momento del apagon. Devuelve segundos por causa (claves de CAUSAS):
+      soc_bajo : SOC <= PISO_SOC al apagarse la casa (o en los 15 min alrededor), o apagon a mitad del corte con SOC cerca del piso
+                 (<= PISO_SOC + 14) que dura hasta que vuelve la red: bateria sin carga por el consumo del cliente.
+      inicio   : apagon en los primeros 3 min del corte con SOC suficiente -> demora o falla en la transicion a OFF-GRID.
+      medio    : apagon a mitad del corte con SOC suficiente -> falla del inversor durante la autonomia.
+      fin      : apagon en los ultimos 90 s del corte (o despues) con SOC suficiente -> demora en el retorno a la red.
+      previo   : la casa ya estaba sin energia antes del corte de red (no atribuible al respaldo).
+      sin_dato : no hay lectura de SOC para decidir."""
+    out = {k: 0.0 for k in CAUSAS}
+    if e.get("cl_s") is None or not e.get("or_s"):
+        return out
+    ini, orS = e["ini"], e["or_s"]
+    lo, hi = ini - PRE, e["fin"] + POST
+    pts = e.get("soc_pts") or []
+    segs = []
+    for x, y in e.get("cl_iv", []):
+        d = max(0.0, min(y, hi) - max(x, lo)) / 1000
+        if d > 0:
+            segs.append((x, y, d))
+    tot = sum(d for _, _, d in segs)
+    if not tot:
+        return out
+    k = min(orS, tot) / tot          # el tiempo sin energia se acota a T_red, igual que en el calculo del respaldo
+    for x, y, d in segs:
+        if x < lo:
+            causa = "previo"
+        else:
+            sx = soc_en(pts, x)
+            if sx is None:
+                sx = e.get("soc")
+            cerca = [v for t, v in pts if x - 15 * MIN * 1000 <= t <= y + 15 * MIN * 1000]
+            ref = min([v for v in [sx] + cerca if v is not None], default=None)
+            if ref is None:
+                causa = "sin_dato"
+            elif ref <= PISO_SOC:
+                causa = "soc_bajo"
+            elif (x - ini) / 1000 < max(orS - T_FIN, orS / 2) and y >= ini + orS * 1000 - T_FIN * 1000 and ref <= PISO_SOC + 14:
+                # se apago con la bateria cerca del piso y no volvio hasta que regreso la red: se agoto (el logger puede no reportar el SOC final)
+                causa = "soc_bajo"
+            else:
+                off = (x - ini) / 1000
+                if off <= min(T_INICIO, orS / 2):
+                    causa = "inicio"
+                elif off >= max(orS - T_FIN, orS / 2):
+                    causa = "fin"
+                else:
+                    causa = "medio"
+        out[causa] += d * k
+    return out
+
+
+def causa_principal(c):
+    """Causa con mas tiempo sin energia en un evento (None si no hubo)."""
+    k = max(c, key=c.get)
+    return k if c[k] > 0 else None
+
+
+def sumar_causas(items):
+    """Suma por causa los segundos sin respaldo de una lista de eventos."""
+    tot = {k: 0.0 for k in CAUSAS}
+    for e in items:
+        for k, v in clasificar_evento(e).items():
+            tot[k] += v
+    return tot
 
 
 ESTADO_PATH = os.path.join(HERE, "..", "data", "estado_casas.json")
@@ -588,12 +678,28 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
         pts.append(("warn" if (efec or 100) < 90 else "ok", f"{len(eventos)} {'evento' if len(eventos) == 1 else 'eventos'} de red en {n_casas} {'sistema' if n_casas == 1 else 'sistemas'} ({', '.join(zonas_ev)}). Interrupción acumulada {n1(OR/3600,1)} h; respaldo {n1(efec,1) if efec is not None else '—'} %."))
         peor = sorted([(r, e) for r, e in eventos if res_evento(e) == "crit" and e["or_s"] >= 30], key=lambda t: -(t[1]["cl_s"] or 0))
         for r, e in peor[:3]:
-            pts.append(("crit", f"{r['casa']} ({zn(r['zona'])}, {r['marca']}): {fmt_min(e['cl_s'])} min sin energía en un corte del OR de {fmt_min(e['or_s'])} min a las {hora(e['ini'])}" + (f"; entró con SOC {e['soc']:.0f} %." if e["soc"] is not None else ".")))
+            _k = causa_principal(clasificar_evento(e))
+            pts.append(("crit", f"{r['casa']} ({zn(r['zona'])}, {r['marca']}): {fmt_min(e['cl_s'])} min sin energía en un corte del OR de {fmt_min(e['or_s'])} min a las {hora(e['ini'])}" + (f"; entró con SOC {e['soc']:.0f} %" if e["soc"] is not None else "") + (f"; causa: {ETIQ_CAUSA[_k]}." if _k else ".")))
         if len(peor) > 3:
             pts.append(("crit", f"Otros {len(peor)-3} cortes largos sin respaldo completo (ver gráfica de respaldo)."))
         bajos = sorted({r["casa"] for r, e in eventos if e["soc"] is not None and e["soc"] <= 21 and e["or_s"] >= 120})
         if bajos:
             pts.append(("warn", f"{len(bajos)} sistemas entraron a un corte con la batería en el piso (SOC ≤ 21 %): {', '.join(bajos[:10])}{'…' if len(bajos) > 10 else ''}."))
+        # causa del tiempo sin respaldo segun el SOC al apagarse la casa (regla del 05/10/2026)
+        cs = [(r, e, clasificar_evento(e)) for r, e in eventos]
+        perdido = sum(sum(c.values()) for r, e, c in cs)
+        if perdido >= 1:
+            def _casas(ks):
+                return sorted({r["casa"] for r, e, c in cs if sum(c[k] for k in ks) >= 1}, key=clave_casa)
+            def _txt(ks):
+                m = sum(c[k] for r, e, c in cs for k in ks)
+                cc = _casas(ks)
+                return f"{fmt_min(m)} min ({', '.join(cc[:8])}{'…' if len(cc) > 8 else ''})"
+            partes = []
+            if _casas(("soc_bajo",)): partes.append("batería sin carga (SOC ≤ 21 % al apagarse la casa, consumo del cliente) " + _txt(("soc_bajo",)))
+            if _casas(CAUSAS_TRANSICION): partes.append("falla o demora de transición con SOC suficiente " + _txt(CAUSAS_TRANSICION))
+            if _casas(("previo", "sin_dato")): partes.append("no atribuible " + _txt(("previo", "sin_dato")))
+            pts.append(("crit" if sum(c[k] for r, e, c in cs for k in CAUSAS_TRANSICION) >= 300 else "warn", f"Tiempo sin respaldo {fmt_min(perdido)} min según el SOC al apagarse la casa: " + "; ".join(partes) + "."))
         enc = sorted({r["casa"] for r, e in eventos if e["en_curso"]})
         if enc:
             pts.append(("crit", "Interrupción del OR en curso: " + ", ".join(enc) + "."))
@@ -684,16 +790,17 @@ def html_por_dia(eventos):
         k = {x: sum(1 for r, e in its if res_evento(e) == x) for x in ("ok", "warn", "crit")}
         socs = [(e["soc"], r["casa"]) for r, e in its if e["soc"] is not None]
         piso = sorted({c for v, c in socs if v <= 21})
+        cd = sumar_causas([e for r, e in its])
         mx = max(cz, key=lambda c: c["dur"])
         tip_cz = tip(f"{sem[d.weekday()]} {d.strftime('%d/%m')} · {len(cz)} cortes de zona", *[f"{zn(c['zona'])} · {hm(c['ini'])}–{hm(c['fin'])} · {fmt_min(c['dur'])} min · {c['n']} sist." for c in cz])
         tip_si = tip(f"{sem[d.weekday()]} {d.strftime('%d/%m')} · {len({r['casa'] for r, e in its})} sistemas afectados", "Casas por zona:", *lista_sistemas(its))
         filas.append(f'<tr><td class="strong">{sem[d.weekday()]} {d.strftime("%d/%m")}</td><td class="num tp" data-tip="{tip_cz}" tabindex="0">{len(cz)}</td><td class="num tp" data-tip="{tip_si}" tabindex="0">{len({r["casa"] for r, e in its})}</td>'
                      f'<td class="num">{n1(OR/3600,1)} h</td><td class="num">{n1(pct,1)+" %" if pct is not None else "—"}</td>'
-                     f'<td class="num">{k["ok"]} · {k["warn"]} · {k["crit"]}</td><td class="num">{len(piso)}</td>'
+                     f'<td class="num">{k["ok"]} · {k["warn"]} · {k["crit"]}</td><td class="num">{fmt_min(cd["soc_bajo"])}</td><td class="num">{fmt_min(sum(cd[x] for x in CAUSAS_TRANSICION))}</td><td class="num">{len(piso)}</td>'
                      f'<td class="num">{n1(min(v for v, c in socs),0)+" %" if socs else "—"}</td>'
                      f'<td>{html.escape(zn(mx["zona"]))}, {hora(mx["ini"])[-5:]}–{hora(mx["fin"])[-5:]} ({fmt_min(mx["dur"])} min, {mx["n"]} sist.)</td></tr>')
-    t_dia = ('<div class="tablewrap"><table style="min-width:900px"><thead><tr><th>Día</th><th>Cortes de zona</th><th>Sistemas afectados</th><th>Interrup. OR acumulada (sistema-horas)</th><th>% respaldado</th>'
-             '<th>Eventos OK · Parcial · Falló</th><th>Entraron con SOC ≤ 21 %</th><th>SOC mín. al inicio</th><th>Corte más largo</th></tr></thead><tbody>' + "".join(filas) + '</tbody></table></div>')
+    t_dia = ('<div class="tablewrap"><table style="min-width:1100px"><thead><tr><th>Día</th><th>Cortes de zona</th><th>Sistemas afectados</th><th>Interrup. OR acumulada (sistema-horas)</th><th>% respaldado</th>'
+             '<th>Eventos OK · Parcial · Falló</th><th>Sin respaldo: batería sin carga (min)</th><th>Sin respaldo: falla o demora de transición (min)</th><th>Entraron con SOC ≤ 21 %</th><th>SOC mín. al inicio</th><th>Corte más largo</th></tr></thead><tbody>' + "".join(filas) + '</tbody></table></div>')
     rel = [c for c in cortes if c["dur"] >= 5 * 60 or c["res"]["warn"] or c["res"]["crit"] or c["piso"] or c["piso_dur"]]
     menores = len(cortes) - len(rel)
     fc = []
@@ -712,7 +819,7 @@ def html_por_dia(eventos):
             '<th>SOC al inicio (mín. / mediana)</th><th>SOC mín. durante el corte</th><th>Baterías en el piso (≤ 21 %) durante el corte</th><th>Sin respaldo completo</th></tr></thead><tbody>' + "".join(fc) + '</tbody></table></div>')
     nota = f'<p class="note">{menores} cortes de zona menores a 5 min, sin falla de respaldo y sin baterías en el piso, no se listan; están en el detalle por sistema.</p>' if menores else ""
     return (f'<section><h2>Interrupciones por día</h2><p>Un corte de zona agrupa los sistemas de la misma zona cuyo corte empezó con menos de 10 min de diferencia. '
-            f'Cada evento se cuenta en el día en que empezó. SOC = estado de carga de la batería al inicio del corte. Pasa el cursor sobre los números de cortes y sistemas para ver cuáles son.</p>{t_dia}'
+            f'Cada evento se cuenta en el día en que empezó. SOC = estado de carga de la batería al inicio del corte. El tiempo sin respaldo se separa según el SOC al apagarse la casa: batería sin carga (SOC ≤ 21 %) o falla o demora de transición (SOC suficiente). Pasa el cursor sobre los números de cortes y sistemas para ver cuáles son.</p>{t_dia}'
             f'<h3 style="margin:14px 0 6px;font:600 1.05rem var(--display)">Cortes de zona relevantes</h3>{t_cz}{nota}</section>')
 
 
@@ -818,7 +925,9 @@ def construir(res, a, b, kwp_tab, ausentes, horas, estados=None, cambios=()):
                 partes = []
                 for e in evs:
                     cli = " · ".join(f"{dt.datetime.fromtimestamp(x / 1000, BOG).strftime('%H:%M')}–{dt.datetime.fromtimestamp(y / 1000, BOG).strftime('%H:%M')}" for x, y in e.get("cl_iv", []) if y - x >= 1000)
-                    partes.append(f"{rango(e['ini'], e['fin'])}" + (f'<span class="sub">cliente sin energía: {cli}</span>' if cli else '<span class="sub">cliente sin interrupción</span>'))
+                    _k = causa_principal(clasificar_evento(e))
+                    _s = f" · SOC {n1(e['soc'], 0)} %" if e.get("soc") is not None else ""
+                    partes.append(f"{rango(e['ini'], e['fin'])}" + (f'<span class="sub">cliente sin energía: {cli}{(" · causa: " + ETIQ_CAUSA[_k] + _s) if _k else ""}</span>' if cli else '<span class="sub">cliente sin interrupción</span>'))
                 horas_html = "".join(f"<div>{x}</div>" for x in partes)
             filas.append(f"""<tr><td class="casa">{'🧳 ' if r['ausente'] else ''}{html.escape(r['casa'])}<span class="sub">{html.escape(r['marca'])}{' · sin paneles (obra)' if r.get('sin_paneles') else ''}</span></td>
 <td class="num">{horas_html}</td><td class="num">{fmt_min(orS) if evs else '—'}</td><td class="num">{fmt_min(clS) if evs else '—'}</td><td class="num">{n1(p,0)+' %' if p is not None else '—'}</td>
