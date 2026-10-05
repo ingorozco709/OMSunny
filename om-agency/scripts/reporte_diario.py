@@ -215,7 +215,8 @@ def procesar(h, a, b, hoy0, dias):
         cl = [x for x in si if x[1] > i0 - PRE and x[0] < i1 + POST]
         clS = sumar(cl, i0 - PRE, i1 + POST) if sol_d else None
         s0 = [v for t, v in soc if i0 - 30 * MIN * 1000 <= t <= i0]
-        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b), cl_iv=[x for x in cl if x[1] > i0 - PRE])
+        sd = [v for t, v in soc if i0 <= t <= i1 + 15 * MIN * 1000]
+        e = dict(ini=i0, fin=i1, n=len(g), or_s=orS, cl_s=clS, soc=(s0[-1] if s0 else None), soc_dur=(min(sd) if sd else None), en_curso=(abierto is not None and abierto >= i0 and i1 >= b), cl_iv=[x for x in cl if x[1] > i0 - PRE])
         e["bk_s"] = None if clS is None else max(0.0, orS - clS)
         e["excede"] = None if clS is None else clS > orS
         r["eventos"].append(e)
@@ -549,6 +550,81 @@ def puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas):
     return sorted(pts, key=lambda t: {"crit": 0, "warn": 1, "none": 2, "ok": 3}[t[0]])
 
 
+def cortes_zona(eventos):
+    """Agrupa los eventos de los sistemas en cortes de zona (misma zona, inicio a menos de 10 min)."""
+    out = []
+    for r, e in sorted(eventos, key=lambda x: (x[0]["zona"], x[1]["ini"])):
+        for c in out:
+            if c["zona"] == r["zona"] and abs(e["ini"] - c["ini"]) <= 10 * MIN * 1000:
+                c["items"].append((r, e)); c["fin"] = max(c["fin"], e["fin"]); c["ini"] = min(c["ini"], e["ini"])
+                break
+        else:
+            out.append(dict(zona=r["zona"], ini=e["ini"], fin=e["fin"], items=[(r, e)]))
+    for c in out:
+        its = c["items"]
+        c["n"] = len({r["casa"] for r, e in its})
+        c["dur"] = (c["fin"] - c["ini"]) / 1000
+        c["res"] = {k: sum(1 for r, e in its if res_evento(e) == k) for k in ("ok", "warn", "crit")}
+        bk = sum(e["bk_s"] for r, e in its if e["bk_s"] is not None); org = sum(e["or_s"] for r, e in its if e["bk_s"] is not None)
+        c["pct"] = 100 * bk / org if org else None
+        socs = [e["soc"] for r, e in its if e["soc"] is not None]
+        c["soc_min"] = min(socs) if socs else None
+        c["soc_med"] = st.median(socs) if socs else None
+        c["piso"] = sorted({r["casa"] for r, e in its if e["soc"] is not None and e["soc"] <= 21})
+        sdur = [(e["soc_dur"], r["casa"]) for r, e in its if e.get("soc_dur") is not None]
+        c["soc_dur_min"] = min((v for v, _ in sdur), default=None)
+        c["piso_dur"] = sorted({cs for v, cs in sdur if v <= 21})
+        c["sin_resp"] = sorted({r["casa"] for r, e in its if res_evento(e) in ("warn", "crit")})
+    return sorted(out, key=lambda c: c["ini"])
+
+
+def html_por_dia(eventos):
+    """Resumen por dia y lista de cortes de zona para ventanas de varios dias."""
+    if not eventos:
+        return ""
+    cortes = cortes_zona(eventos)
+    dias = {}
+    for r, e in eventos:
+        dias.setdefault(dt.datetime.fromtimestamp(e["ini"] / 1000, BOG).date(), []).append((r, e))
+    sem = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+    filas = []
+    for d in sorted(dias):
+        its = dias[d]
+        cz = [c for c in cortes if dt.datetime.fromtimestamp(c["ini"] / 1000, BOG).date() == d]
+        OR = sum(e["or_s"] for r, e in its)
+        bk = sum(e["bk_s"] for r, e in its if e["bk_s"] is not None); org = sum(e["or_s"] for r, e in its if e["bk_s"] is not None)
+        pct = 100 * bk / org if org else None
+        k = {x: sum(1 for r, e in its if res_evento(e) == x) for x in ("ok", "warn", "crit")}
+        socs = [(e["soc"], r["casa"]) for r, e in its if e["soc"] is not None]
+        piso = sorted({c for v, c in socs if v <= 21})
+        mx = max(cz, key=lambda c: c["dur"])
+        filas.append(f'<tr><td class="strong">{sem[d.weekday()]} {d.strftime("%d/%m")}</td><td class="num">{len(cz)}</td><td class="num">{len({r["casa"] for r, e in its})}</td>'
+                     f'<td class="num">{n1(OR/3600,1)} h</td><td class="num">{n1(pct,1)+" %" if pct is not None else "—"}</td>'
+                     f'<td class="num">{k["ok"]} · {k["warn"]} · {k["crit"]}</td><td class="num">{len(piso)}</td>'
+                     f'<td class="num">{n1(min(v for v, c in socs),0)+" %" if socs else "—"}</td>'
+                     f'<td>{html.escape(zn(mx["zona"]))}, {hora(mx["ini"])[-5:]}–{hora(mx["fin"])[-5:]} ({fmt_min(mx["dur"])} min, {mx["n"]} sist.)</td></tr>')
+    t_dia = ('<div class="tablewrap"><table style="min-width:900px"><thead><tr><th>Día</th><th>Cortes de zona</th><th>Sistemas afectados</th><th>Interrup. OR acumulada (sistema-horas)</th><th>% respaldado</th>'
+             '<th>Eventos OK · Parcial · Falló</th><th>Entraron con SOC ≤ 21 %</th><th>SOC mín. al inicio</th><th>Corte más largo</th></tr></thead><tbody>' + "".join(filas) + '</tbody></table></div>')
+    rel = [c for c in cortes if c["dur"] >= 5 * 60 or c["res"]["warn"] or c["res"]["crit"] or c["piso"] or c["piso_dur"]]
+    menores = len(cortes) - len(rel)
+    fc = []
+    for c in sorted(rel, key=lambda c: c["ini"]):
+        cl = "crit" if c["res"]["crit"] else "warn" if c["res"]["warn"] else "ok"
+        fc.append(f'<tr><td class="num">{hora(c["ini"])} – {hora(c["fin"])[-5:]}</td><td>{html.escape(zn(c["zona"]))}</td><td class="num">{fmt_min(c["dur"])} min</td><td class="num">{c["n"]}</td>'
+                  f'<td class="num">{n1(c["pct"],0)+" %" if c["pct"] is not None else "—"}</td>'
+                  f'<td><span class="pill {cl}">{c["res"]["ok"]} OK · {c["res"]["warn"]} parc. · {c["res"]["crit"]} fallo</span></td>'
+                  f'<td class="num">{n1(c["soc_min"],0) if c["soc_min"] is not None else "—"} % / {n1(c["soc_med"],0) if c["soc_med"] is not None else "—"} %</td>'
+                  f'<td class="num">{n1(c["soc_dur_min"],0)+" %" if c["soc_dur_min"] is not None else "—"}</td>'
+                  f'<td class="obs">{html.escape(", ".join(c["piso_dur"][:8]) + ("…" if len(c["piso_dur"]) > 8 else "")) or "—"}</td>'
+                  f'<td class="obs">{html.escape(", ".join(c["sin_resp"][:8]) + ("…" if len(c["sin_resp"]) > 8 else "")) or "—"}</td></tr>')
+    t_cz = ('<div class="tablewrap"><table style="min-width:1000px"><thead><tr><th>Cuándo</th><th>Zona</th><th>Duración</th><th>Sistemas</th><th>% respaldado</th><th>Resultado</th>'
+            '<th>SOC al inicio (mín. / mediana)</th><th>SOC mín. durante el corte</th><th>Baterías en el piso (≤ 21 %) durante el corte</th><th>Sin respaldo completo</th></tr></thead><tbody>' + "".join(fc) + '</tbody></table></div>')
+    nota = f'<p class="note">{menores} cortes de zona menores a 5 min, sin falla de respaldo y sin baterías en el piso, no se listan; están en el detalle por sistema.</p>' if menores else ""
+    return (f'<section><h2>Interrupciones por día</h2><p>Un corte de zona agrupa los sistemas de la misma zona cuyo corte empezó con menos de 10 min de diferencia. '
+            f'Cada evento se cuenta en el día en que empezó. SOC = estado de carga de la batería al inicio del corte.</p>{t_dia}'
+            f'<h3 style="margin:14px 0 6px;font:600 1.05rem var(--display)">Cortes de zona relevantes</h3>{t_cz}{nota}</section>')
+
+
 def construir(res, a, b, kwp_tab, ausentes, horas):
     ini = dt.datetime.fromtimestamp(a / 1000, BOG)
     fin = dt.datetime.fromtimestamp(b / 1000, BOG)
@@ -575,6 +651,9 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
     des = [r["des"] for r in res if r["des"] is not None and r["casa"] not in ausentes]
     des_med = st.mean(des) if des else None
     pts = puntos(res, eventos, efec, OR, ausentes, des_med, exp, gen, dem, b, horas)
+    if horas > 24 and eventos:
+        cz_ = cortes_zona(eventos); mx_ = max(cz_, key=lambda c: c["dur"])
+        pts.insert(0, ("ok" if not mx_["res"]["crit"] and not mx_["res"]["warn"] else "warn", f"Corte más largo del periodo: {zn(mx_['zona'])}, {rango(mx_['ini'], mx_['fin'])} ({fmt_min(mx_['dur'])} min, {mx_['n']} sistemas): respaldo {n1(mx_['pct'],0) if mx_['pct'] is not None else '—'} %, SOC mínimo al inicio {n1(mx_['soc_min'],0) if mx_['soc_min'] is not None else '—'} %. Detalle por día más abajo."))
     css = open(os.path.join(HERE, "reporte_diario.css"), encoding="utf-8").read()
 
     top5 = pts[:5]
@@ -624,6 +703,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 <td class="num">{'sin paneles' if r.get('sin_paneles') else n1(r.get('gen'),1)}</td><td class="num">{(n1(r['des'],0)+' %') if r['des'] is not None else '—'}</td><td class="num">{n1(r.get('exp'),2)}</td></tr>""")
         sec.append(f'<h3 style="margin:18px 0 6px">{html.escape(zn(z))} · {len(rs)} sistemas</h3><div class="tablewrap"><table><thead><tr><th>Sistema</th><th>Hora del corte</th><th>Interrup. OR (min)</th><th>Percibida (min)</th><th>% respaldado</th><th>Resultado</th><th>SOC mín. %</th><th>Gen. kWh</th><th>Rend. %</th><th>Export. kWh</th></tr></thead><tbody>{"".join(filas)}</tbody></table></div>')
     titulo = f"Reporte diario O&amp;M · {fin.strftime('%d/%m/%Y')}"
+    por_dia_html = html_por_dia(eventos) if horas > 24 else ""
     c_lin = svg_linea(res, a, b, horas)
     c_resp = svg_respaldo(res)
     c_rend = svg_rendimiento(res, ausentes)
@@ -640,6 +720,7 @@ def construir(res, a, b, kwp_tab, ausentes, horas):
 </header>
 {kpis}
 <section><h2>Lo más importante</h2>{top_html}</section>
+{por_dia_html}
 <section><h2>Interrupciones de la red</h2>
 <div class="chart"><h3>Cuándo se cayó la red, por zona</h3><p class="sub2">Cada marca es un corte del OR. El color es el peor resultado entre los sistemas afectados (el detalle está al pasar el cursor).</p>{c_lin}</div>
 <div class="chart"><h3>Respaldo por sistema</h3>{c_resp}</div>
