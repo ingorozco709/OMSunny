@@ -1,0 +1,7 @@
+{
+ "umbral_evento_s": 120,
+ "excluir_sistemas": {
+  "Casa 48PC": "En pruebas de pos energización"
+ },
+ "nota": "Para volver a incluir un sistema en el indicador, quítalo de excluir_sistemas. Los sistemas Piloto Promigas, Piloto Huawei y Castellana Real ya se excluyen en reporte_diario.py."
+}
