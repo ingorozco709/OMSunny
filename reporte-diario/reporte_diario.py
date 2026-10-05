@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""Reporte diario de operación de la flota Metrum (lunes a viernes, 7:00 a. m. hora de Bogotá).
+
+Uso:
+  python3 reporte_diario.py                      # ventana automática que termina ahora
+  python3 reporte_diario.py --fin 2026-10-05T07:00 [--inicio 2026-10-02T07:00]
+  python3 reporte_diario.py --salida reporte.html --json resumen.json
+
+Ventana: martes a viernes, las últimas 24 h. Lunes, desde el viernes a las 7:00 (fin de semana completo).
+Variables de entorno: METRUM_API_URL, METRUM_USERNAME, METRUM_PASSWORD.
+Solo lee datos de Metrum; no escribe nada en la plataforma.
+"""
+import os, sys, json, math, time, argparse, html, re, statistics as st
+import datetime as dt, concurrent.futures as cf, urllib.request, urllib.error
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BOG = dt.timedelta(hours=5)           # Bogotá = UTC-5, sin horario de verano
+MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+RESERVA = 22.0                        # SOC a partir del cual se considera la batería en reserva (piso típico 20 %)
+GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al evento de red más cercano dentro de este radio
+
+# ------------------------------------------------------------------ Metrum
+BASE = os.environ.get("METRUM_API_URL", "").rstrip("/")
+_tok = {"t": None, "ts": 0}
+
+def req(method, path, body=None, token=True, timeout=90):
+    data = json.dumps(body).encode() if body is not None else None
+    h = {"Content-Type": "application/json", "Accept": "application/json"}
+    if token:
+        h["Authorization"] = "Bearer " + get_token()
+    r = urllib.request.Request(BASE + path, data=data, headers=h, method=method)
+    for intento in range(3):
+        try:
+            with urllib.request.urlopen(r, timeout=timeout) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            try:
+                return e.code, json.loads(raw)
+            except Exception:
+                return e.code, raw[:200].decode("utf8", "ignore")
+        except Exception:
+            if intento == 2:
+                return 0, None
+            time.sleep(2 * (intento + 1))
+
+def get_token():
+    if _tok["t"] and time.time() - _tok["ts"] < 6000:
+        return _tok["t"]
+    c, d = req("POST", "/api/auth/login", {"username": os.environ["METRUM_USERNAME"], "password": os.environ["METRUM_PASSWORD"]}, token=False)
+    assert c == 200, f"login Metrum falló ({c})"
+    _tok["t"], _tok["ts"] = d["token"], time.time()
+    return _tok["t"]
+
+def listar_dispositivos():
+    out, page = [], 0
+    while True:
+        c, d = req("GET", f"/api/user/devices?pageSize=100&page={page}")
+        assert c == 200, f"no se pudo listar dispositivos ({c})"
+        out += d["data"]
+        if not d.get("hasNext"):
+            return out
+        page += 1
+
+ATTR_KEYS = "city,zone,gateway,mettype,spcus,invbrand,invmodel,invcap,invtype"
+
+def atributos(dv):
+    c, a = req("GET", f"/api/plugins/telemetry/DEVICE/{dv['id']['id']}/values/attributes?keys={ATTR_KEYS}")
+    r = {z["key"]: z["value"] for z in a} if c == 200 and isinstance(a, list) else {}
+    return dv, r
+
+def serie(dev_id, keys, t0, t1, limit=5000):
+    c, d = req("GET", f"/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys={keys}&startTs={int(t0)}&endTs={int(t1)}&limit={limit}&agg=NONE&orderBy=ASC", timeout=120)
+    return dev_id, (d if c == 200 and isinstance(d, dict) else {})
+
+# ------------------------------------------------------------------ utilidades
+def hb(t, seg=False):
+    return (dt.datetime.utcfromtimestamp(t / 1000) - BOG).strftime("%H:%M:%S" if seg else "%H:%M")
+
+def fecha_bog(t):
+    return (dt.datetime.utcfromtimestamp(t / 1000) - BOG)
+
+def hbd(t):
+    d = fecha_bog(t)
+    return f"{d.day} {MESES[d.month-1]} {d.strftime('%H:%M')}"
+
+def ts_bog(y, m, d, hh=0, mm=0):
+    return int(((dt.datetime(y, m, d, hh, mm) + BOG) - dt.datetime(1970, 1, 1)).total_seconds() * 1000)
+
+def fmt(s):
+    s = int(round(s))
+    if s <= 0:
+        return "0 s"
+    h, r = divmod(s, 3600); m, x = divmod(r, 60)
+    if h:
+        return f"{h} h {m:02d} min"
+    if m:
+        return f"{m} min {x:02d} s" if x else f"{m} min"
+    return f"{x} s"
+
+def dec(x, n=1):
+    return (f"%.{n}f" % x).replace(".", ",")
+
+def esc(x):
+    return html.escape(str(x), quote=True)
+
+def num(v):
+    try:
+        return float(v)
+    except Exception:
+        return None
+
+def S(data, key):
+    """Serie ordenada [(ts, valor)] con valores numéricos como float y textos tal cual."""
+    out = []
+    for p in sorted(data.get(key, []), key=lambda p: p["ts"]):
+        f = num(p["value"])
+        out.append((p["ts"], f if f is not None else p["value"]))
+    return out
+
+def pares(ev):
+    out, o = [], None
+    for t, v in ev:
+        if v == "po" and o is None:
+            o = t
+        elif v == "pr" and o is not None:
+            out.append([o, t]); o = None
+        elif v == "pr" and o is None:
+            out.append([None, t])
+    if o is not None:
+        out.append([o, None])
+    return out
+
+def antes(L, t, tol=1800000):
+    c = [(k, v) for k, v in L if k <= t and t - k <= tol]
+    return c[-1] if c else None
+
+def despues(L, t, tol=1800000):
+    c = [(k, v) for k, v in L if k >= t and k - t <= tol]
+    return c[0] if c else None
+
+def contador(L, t, tol=1800000):
+    """Valor del contador acumulado en el instante t (muestra más cercana dentro de la tolerancia)."""
+    c = [(abs(k - t), v) for k, v in L if abs(k - t) <= tol and isinstance(v, float)]
+    return min(c)[1] if c else None
+
+def delta(L, a, b):
+    x, y = contador(L, a), contador(L, b)
+    if x is None or y is None or y < x:
+        return None
+    return y - x
+
+# ------------------------------------------------------------------ ventana
+def ventana(args):
+    ahora = dt.datetime.utcnow() - BOG
+    fin = dt.datetime.strptime(args.fin, "%Y-%m-%dT%H:%M") if args.fin else ahora.replace(second=0, microsecond=0)
+    if args.inicio:
+        ini = dt.datetime.strptime(args.inicio, "%Y-%m-%dT%H:%M")
+    elif fin.weekday() == 0:            # lunes: desde el viernes a las 7:00
+        v = fin - dt.timedelta(days=3)
+        ini = v.replace(hour=7, minute=0)
+    else:
+        ini = fin - dt.timedelta(hours=24)
+    f = lambda d: ts_bog(d.year, d.month, d.day, d.hour, d.minute)
+    return f(ini), f(fin), ini, fin
+
+# ------------------------------------------------------------------ sistemas
+def construir_sistemas(devs, attrs):
+    """Agrupa dispositivos por (ciudad, casa). Una casa = medidor de red + medidor solar + inversor(es) + gateway(s)."""
+    pul = {}
+    for dv in devs:
+        if dv["type"] == "pulsar":
+            a = attrs[dv["id"]["id"]]
+            pul[dv["name"]] = a.get("spcus")
+    SYS = {}
+    for dv in devs:
+        a = attrs[dv["id"]["id"]]
+        gw = a.get("gateway") if dv["type"] != "pulsar" else dv["name"]
+        casa = a.get("spcus") or pul.get(gw)
+        ciudad = a.get("city") or "SIN CIUDAD"
+        if not casa:
+            continue
+        s = SYS.setdefault((ciudad, casa), dict(ciudad=ciudad, zona=a.get("zone") or "", casa=casa, inv=[], red=[], solar=[], pul=[], marca="", modelo="", cap=None))
+        s["zona"] = s["zona"] or a.get("zone") or ""
+        rec = dict(id=dv["id"]["id"], name=dv["name"], attrs=a)
+        if dv["type"] == "inverter":
+            s["inv"].append(rec)
+        elif dv["type"] == "meter":
+            (s["red"] if a.get("mettype") == "red" else s["solar"]).append(rec)
+        elif dv["type"] == "pulsar":
+            s["pul"].append(rec)
+    return SYS
+
+def ordenar_ciudad(c):
+    o = ["CALI", "TURBACO", "BARRANQUILLA", "CARTAGENA"]
+    return (o.index(c) if c in o else 99, c)
+
+def num_casa(nombre):
+    m = re.search(r"\d+", nombre)
+    return (int(m.group()) if m else 0, nombre)
+
+def elegir_activo(lst, datos, claves):
+    """Entre varios dispositivos de la misma casa, el que tiene el dato más reciente."""
+    mejor, mt = None, -1
+    for r in lst:
+        d = datos.get(r["id"], {})
+        t = max([p["ts"] for k in claves for p in d.get(k, [])] or [-1])
+        if t > mt:
+            mejor, mt = r, t
+    return mejor, mt
+
+# ------------------------------------------------------------------ análisis por sistema
+def analizar(s, D, W0, W1, dias):
+    """D: datos por id de dispositivo. Devuelve un dict con interrupciones, respaldo, rendimiento, exportación y comunicación."""
+    inv, t_inv = elegir_activo(s["inv"], D, ["BattSOC", "voltGridA", "activityState"])
+    red, t_red = elegir_activo(s["red"], D, ["voltageA", "energyAE", "event", "activityState"])
+    sol, t_sol = elegir_activo(s["solar"], D, ["energyAI", "event", "activityState"])
+    pu, t_pu = elegir_activo(s["pul"], D, ["activityState"])
+    di = D.get(inv["id"], {}) if inv else {}
+    dr = D.get(red["id"], {}) if red else {}
+    ds = D.get(sol["id"], {}) if sol else {}
+    dp = D.get(pu["id"], {}) if pu else {}
+    s["marca"] = ((inv["attrs"].get("invbrand") or "") if inv else "").upper()
+    s["modelo"] = ((inv["attrs"].get("invmodel") or "") if inv else "").strip()
+    s["cap"] = num(inv["attrs"].get("invcap")) if inv else None
+    R = dict(sys=s, inv_name=inv["name"] if inv else None)
+    # --- comunicación
+    R["ult"] = dict(inv=t_inv if t_inv > 0 else None, red=t_red if t_red > 0 else None, solar=t_sol if t_sol > 0 else None, gw=t_pu if t_pu > 0 else None)
+    # --- batería
+    soc = [(t, v) for t, v in S(di, "BattSOC") if isinstance(v, float)]
+    soc = [(t, v) for i, (t, v) in enumerate(soc) if not (v == 0.0 and 0 < i < len(soc) - 1 and soc[i-1][1] > 10 and soc[i+1][1] > 10)]
+    vga, vgb, vgc = (S(di, k) for k in ("voltGridA", "voltGridB", "voltGridC"))
+    R["soc"] = soc
+    # --- estado actual de la red (señal del inversor, umbral < 5 V; regla del equipo)
+    live = bool(soc) and W1 - soc[-1][0] <= 30 * 60000
+    def bajo(L): return bool(L) and isinstance(L[-1][1], float) and L[-1][1] < 5
+    vg_bajo = live and bajo(vga) and (not vgb or bajo(vgb)) and (not vgc or bajo(vgc))
+    ra = S(dr, "activityState")
+    red_muerto = bool(ra) and ra[-1][1] == "noResponse"
+    rv = [(t, v) for t, v in S(dr, "voltageA") if isinstance(v, float)]
+    red_presente = bool(rv) and W1 - rv[-1][0] <= 45 * 60000 and rv[-1][1] >= 90 and not red_muerto
+    # inversor sin entrada de red mientras el medidor de red marca tensión: inversor aislado, no es un corte de red
+    R["aislado"] = bool(vg_bajo and red_presente)
+    R["live"] = live; R["vg_bajo"] = vg_bajo; R["soc_ult"] = soc[-1] if soc else None
+    # --- cortes de red (medidor de red)
+    ev_red = [(t, v) for t, v in S(dr, "event") if v in ("po", "pr")]
+    cortes = []
+    for a, b in pares(ev_red):
+        if a is None:
+            if b is not None and b >= W0:          # el corte empezó antes del historial consultado
+                cortes.append(dict(a=W0, b=b, abierto=False, ant=True, estimado=True))
+            continue
+        fin_c = b if b is not None else W1
+        if fin_c < W0 or a > W1:
+            continue
+        cortes.append(dict(a=a, b=b, abierto=b is None, ant=False))
+    # corte en curso sin evento aún (el medidor de red sin tensión no envía eventos hasta que vuelve)
+    en_curso = vg_bajo and not R["aislado"] and (red_muerto or not cortes or cortes[-1]["b"] is not None)
+    if en_curso and not any(c["abierto"] for c in cortes):
+        # inicio estimado: primera muestra de inversor con tensión < 5 V tras la última con red
+        t_ini = None
+        for t, v in reversed(vga):
+            if isinstance(v, float) and v >= 5:
+                break
+            t_ini = t
+        cortes.append(dict(a=t_ini if t_ini else W1 - 15 * 60000, b=None, abierto=True, ant=False, estimado=True))
+    R["en_curso"] = en_curso
+    # --- huecos de tensión en la casa (medidor solar)
+    ev_sol = [(t, v) for t, v in S(ds, "event") if v in ("po", "pr")]
+    huecos = []
+    for a, b in pares(ev_sol):
+        if a is None:
+            continue
+        fin_h = b if b is not None else W1
+        if fin_h < W0 or a > W1:
+            continue
+        huecos.append(dict(a=a, b=b, d=(fin_h - a) / 1000))
+    # --- respaldo por corte
+    usados = set()
+    for c in cortes:
+        if c["a"] is None:
+            c.update(dur=None, hu=[], perc=0, caer=None, volver=None, cob=None); continue
+        fin_c = c["b"] if c["b"] is not None else W1
+        c["a_v"] = max(c["a"], W0); c["b_v"] = min(fin_c, W1)
+        c["dur"] = (c["b_v"] - c["a_v"]) / 1000
+        lim_fin = (c["b"] if c["b"] is not None else W1) + 10 * 60000
+        hu = [h for i, h in enumerate(huecos) if c["a"] - GAP_RADIO <= h["a"] <= lim_fin]
+        for h in hu:
+            usados.add(id(h))
+            if abs(h["a"] - c["a"]) <= GAP_RADIO: h["tipo"] = "al caer"
+            elif c["b"] is not None and abs(h["a"] - c["b"]) <= GAP_RADIO: h["tipo"] = "al volver"
+            else: h["tipo"] = "durante" if (c["b"] is None or h["a"] < c["b"]) else "al reconectar"
+        c["hu"] = hu
+        c["perc"] = sum(h["d"] for h in hu)
+        c["caer"] = sum(h["d"] for h in hu if h["tipo"] == "al caer")
+        c["volver"] = sum(h["d"] for h in hu if h["tipo"] in ("al volver", "al reconectar"))
+        dentro = sum(h["d"] for h in hu if c["b"] is None or h["a"] < c["b"])
+        c["cob"] = max(0.0, 100.0 * (1 - dentro / c["dur"])) if c["dur"] and c["dur"] >= 60 else None
+        # batería durante el corte
+        s0 = antes(soc, c["a"]) or (soc[0] if soc else None)
+        en = [v for t, v in soc if c["a"] <= t <= (c["b"] if c["b"] is not None else W1)]
+        s1 = despues(soc, c["b"]) if c["b"] is not None else (soc[-1] if soc else None)
+        c["soc0"] = s0[1] if s0 else None; c["socmin"] = min(en) if en else None; c["soc1"] = s1[1] if s1 else None
+    R["cortes"] = [c for c in cortes if c["a"] is not None]
+    R["huecos_fuera"] = [h for h in huecos if id(h) not in usados]
+    R["huecos"] = huecos
+    # --- estados del inversor
+    est = []
+    run = S(di, "invrun")
+    for t, v in run:
+        if W0 <= t <= W1 and v in ("fault", "alarm", "standby", "activating", "shutting_down"):
+            est.append((t, v))
+    ev_i = [(t, v) for t, v in S(di, "event") if W0 <= t <= W1]
+    R["est"] = est; R["codigos"] = ev_i
+    # --- generación FV por día (contador diario energyPD, Wh)
+    pd = S(di, "energyPD")
+    R["pv"] = {}
+    for d0, d1 in dias:
+        v = [x for t, x in pd if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
+        R["pv"][d0] = max(v) / 1000 if v else None
+    R["pv_hist"] = {}
+    # --- energía en medidores (kWh): exportación e importación de red, consumo del lado respaldado
+    aE = S(dr, "energyAE"); aI = S(dr, "energyAI"); cI = S(ds, "energyAI")
+    segs = []
+    for d0, d1 in dias:
+        segs.append((d0, max(d0, W0), min(d1, W1)))
+    R["exp"] = {}; R["imp"] = {}; R["cons"] = {}
+    for d0, a, b in segs:
+        for nombre, L in (("exp", aE), ("imp", aI), ("cons", cI)):
+            x = delta(L, a, b)
+            R[nombre][d0] = x / 1000 if x is not None else None
+    for nombre, L in (("exp", aE), ("imp", aI), ("cons", cI)):
+        x = delta(L, W0, W1)
+        R[nombre]["total"] = x / 1000 if x is not None else None
+    return R
+
+# ------------------------------------------------------------------ agregación
+def eventos_de_red(RS):
+    """Agrupa los cortes de varios sistemas de la misma ciudad que empiezan con menos de 3 min de diferencia."""
+    L = []
+    for R in RS:
+        for c in R["cortes"]:
+            L.append((R["sys"]["ciudad"], c["a"], R, c))
+    L.sort(key=lambda x: (ordenar_ciudad(x[0]), x[1]))
+    ev = []
+    for ciudad, a, R, c in L:
+        if ev and ev[-1]["ciudad"] == ciudad and a - ev[-1]["ult"] <= 180000:
+            e = ev[-1]; e["ult"] = a; e["m"].append((R, c))
+        else:
+            ev.append(dict(ciudad=ciudad, ini=a, ult=a, m=[(R, c)]))
+    for e in ev:
+        e["n"] = len(set(id(R) for R, c in e["m"]))
+        e["cortes"] = len(e["m"])
+        e["fin"] = None if any(c["b"] is None for R, c in e["m"]) else max(c["b"] for R, c in e["m"])
+        durs = [c["dur"] for R, c in e["m"] if c["dur"]]
+        e["dur"] = st.median(durs) if durs else None
+    return ev
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fin"); ap.add_argument("--inicio")
+    ap.add_argument("--salida", default="reporte_diario.html"); ap.add_argument("--json", default="resumen_diario.json")
+    args = ap.parse_args()
+    W0, W1, ini, fin = ventana(args)
+    es_lunes = fin.weekday() == 0 and not args.inicio
+    # días locales de la ventana cuya jornada solar termina antes del fin (para generación y exportación)
+    d = ini.replace(hour=0, minute=0, second=0, microsecond=0)
+    dias = []
+    while d.date() < fin.date():
+        dias.append((ts_bog(d.year, d.month, d.day), ts_bog(d.year, d.month, d.day) + 86400000))
+        d += dt.timedelta(days=1)
+    if not dias:
+        dias = [(ts_bog(ini.year, ini.month, ini.day), ts_bog(ini.year, ini.month, ini.day) + 86400000)]
+    t_cons = time.time()
+    devs = listar_dispositivos()
+    with cf.ThreadPoolExecutor(8) as ex:
+        attrs = {dv["id"]["id"]: a for dv, a in ex.map(atributos, devs)}
+    SYS = construir_sistemas(devs, attrs)
+    # telemetría
+    IK = "invrun,invstate,voltGridA,voltGridB,voltGridC,BattSOC,BattPower,energyPD,activityState,event"
+    MR = "event,voltageA,activityState,FlagStaProf,energyAE,energyAI,powerAI"
+    MS = "event,activityState,energyAI"
+    tipo = {dv["id"]["id"]: dv["type"] for dv in devs}
+    tareas = []
+    for s in SYS.values():
+        for r in s["inv"]: tareas.append((r["id"], IK, W0 - 4 * 3600000, W1 + 600000))
+        for r in s["red"]: tareas.append((r["id"], MR, W0 - 12 * 3600000, W1 + 600000))
+        for r in s["solar"]: tareas.append((r["id"], MS, W0 - 12 * 3600000, W1 + 600000))
+        for r in s["pul"]: tareas.append((r["id"], "activityState", W0 - 12 * 3600000, W1 + 600000))
+    D = {}
+    with cf.ThreadPoolExecutor(8) as ex:
+        for i, d in ex.map(lambda t: serie(*t), tareas):
+            D[i] = d
+    # histórico de generación FV (9 días) para comparar con el patrón propio
+    HPD = {}
+    h0 = ts_bog(ini.year, ini.month, ini.day) - 9 * 86400000
+    tareas2 = [(r["id"], "energyPD", h0, W1 + 600000) for s in SYS.values() for r in s["inv"]]
+    with cf.ThreadPoolExecutor(8) as ex:
+        for i, d in ex.map(lambda t: serie(*t), tareas2):
+            HPD[i] = S(d, "energyPD")
+    # análisis
+    RS = []
+    for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
+        s = SYS[k]
+        if not (s["inv"] or s["red"]):
+            continue
+        R = analizar(s, D, W0, W1, dias)
+        inv, _ = elegir_activo(s["inv"], D, ["BattSOC", "voltGridA", "activityState"])
+        hist = {}
+        if inv:
+            for q in range(1, 10):
+                d0 = dias[0][0] - q * 86400000
+                v = [x for t, x in HPD.get(inv["id"], []) if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
+                hist[d0] = max(v) / 1000 if v else None
+        R["pv_hist"] = hist
+        RS.append(R)
+    exec(open(os.path.join(HERE, "reporte_html.py"), encoding="utf8").read(), globals())
+    generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons)
+
+if __name__ == "__main__":
+    main()
