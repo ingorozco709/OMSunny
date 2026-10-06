@@ -195,3 +195,12 @@ al 2026-10-05: gateway 1023 = Casa 24, 1026 = Casa 155 y 1030 = Casa 287 (Terra 
 1039 = Casa 9G (Gerona Club House); IN42420393 = Casa 121 CR (Castellana Real). Leer
 `spcus` en vivo en cada reporte, porque el mapa puede cambiar. El operador de red
 (`spdno`) de esta zona es Air-e.
+
+**Aclaración (2026-10-05, mismo día):** el usuario confirmó que los sistemas de Oficina
+Promigas son los pilotos y que deben excluirse de todos los reportes, sin mencionarlos
+ni siquiera como nota. Los reportes solo dicen, en general, que los sistemas piloto están
+excluidos. Además, el reporte de estado de operación de una zona sigue el formato del
+reporte de interrupciones de Cali (titular con la conclusión, KPIs, "Qué pasó", tabla por
+casa con el tiempo sin tensión en cada evento, línea de tiempo, batería durante el corte,
+pendientes y límites del análisis), pero solo con datos de hoy: sin comparar con ayer ni
+citar fechas de días anteriores.
