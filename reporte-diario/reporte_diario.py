@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reporte diario de operación de la flota Metrum (lunes a viernes, 7:00 a. m. hora de Bogotá).
+"""Reporte diario de operación del portafolio Sunny Metrum (lunes a viernes, 7:00 a. m. hora de Bogotá).
 
 Uso:
   python3 reporte_diario.py                      # ventana automática que termina ahora
@@ -155,6 +155,21 @@ def delta(L, a, b):
         return None
     return y - x
 
+try:
+    KWP = json.load(open(os.path.join(HERE, "potencia_instalada.json"), encoding="utf8"))
+except (OSError, ValueError):
+    KWP = {}
+HMC = {}   # cierres diarios de los medidores (CenergyAI, CenergyAE) por dispositivo
+def bal_dia(s, d0, d1):
+    """Balance de medidores del día: generación = demanda (CenergyAI del medidor solar) − importada + exportada (CenergyAI/AE del medidor de red). Devuelve (generación kWh, demanda kWh) o None."""
+    for r in s["red"]:
+        for q in s["solar"]:
+            L = HMC.get(r["id"], {}); M = HMC.get(q["id"], {})
+            dem = delta(M.get("CenergyAI", []), d0, d1); imp = delta(L.get("CenergyAI", []), d0, d1); exp_ = delta(L.get("CenergyAE", []), d0, d1)
+            if dem is not None and imp is not None and exp_ is not None:
+                return (dem - imp + exp_) / 1000, dem / 1000
+    return None
+
 # ------------------------------------------------------------------ ventana
 def ventana(args):
     ahora = dt.datetime.utcnow() - BOG
@@ -220,11 +235,10 @@ def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in):
     if "piloto" in nombre:
         return "piloto"
     dias_dato = {}
-    for r in s["inv"]:
-        for d0 in range(d_ini, d_fin, 86400000):
-            v = [x for t, x in HPD.get(r["id"], []) if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
-            if v:
-                dias_dato[d0] = max(dias_dato.get(d0, 0.0), max(v) / 1000)
+    for d0 in range(d_ini, d_fin, 86400000):
+        b = bal_dia(s, d0, d0 + 86400000)
+        if b is not None:
+            dias_dato[d0] = b[0]
     if len(dias_dato) >= PV_MIN_DIAS and max(dias_dato.values()) <= PV_MIN_KWH:
         return "sin generación FV (solo baterías)"
     return None
@@ -247,6 +261,36 @@ def elegir_activo(lst, datos, claves):
             mejor, mt = r, t
     return mejor, mt
 
+
+TRANSFER_MAX = 120   # s: un hueco "al caer" de hasta 2 min es la transferencia a isla; un hueco "durante" de 2 min o más es una caída del respaldo
+SOC_AGOTADA = 12     # % de SOC con el que se considera batería agotada
+
+def veredicto_respaldo(c, bpw, soc, W1):
+    """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | caída durante el respaldo | sin respaldo."""
+    a = c["a"]; b = c["b"] if c["b"] is not None else W1
+    pw = [v for t, v in bpw if a <= t <= b]
+    if pw:
+        med = st.median(pw)
+        fuente = "batería" if med > 200 else ("solar" if med < -200 else "solar + batería llena")
+    else:
+        fuente = None
+    hu = c.get("hu") or []
+    durante = [h for h in hu if h["tipo"] == "durante" and h["d"] >= TRANSFER_MAX]
+    causa = None
+    if not hu:
+        v = "Respaldo total"
+    elif durante:
+        v = "Caída durante el respaldo"
+        h0 = min(durante, key=lambda h: h["a"])
+        sc = [x for t, x in soc if t <= h0["a"] + 300000]
+        sc = sc[-1] if sc else None
+        causa = "batería agotada" if sc is not None and sc <= SOC_AGOTADA else ("SOC %d %%: revisar inversor" % round(sc) if sc is not None else "revisar inversor")
+    elif c.get("cob") is not None and c["cob"] < 5:
+        v = "Sin respaldo"
+    else:
+        v = "Respaldo total con transferencia"
+    return v, fuente, causa
+
 # ------------------------------------------------------------------ análisis por sistema
 def analizar(s, D, W0, W1, dias):
     """D: datos por id de dispositivo. Devuelve un dict con interrupciones, respaldo, rendimiento, exportación y comunicación."""
@@ -260,7 +304,8 @@ def analizar(s, D, W0, W1, dias):
     dp = D.get(pu["id"], {}) if pu else {}
     s["marca"] = ((inv["attrs"].get("invbrand") or "") if inv else "").upper()
     s["modelo"] = ((inv["attrs"].get("invmodel") or "") if inv else "").strip()
-    s["cap"] = num(inv["attrs"].get("invcap")) if inv else None
+    s["cap_inv"] = num(inv["attrs"].get("invcap")) if inv else None
+    s["cap"] = KWP.get(s["casa"].strip().lower())   # potencia pico instalada en DC (kWp), del archivo de sistemas
     R = dict(sys=s, inv_name=inv["name"] if inv else None)
     # --- comunicación
     R["ult"] = dict(inv=t_inv if t_inv > 0 else None, red=t_red if t_red > 0 else None, solar=t_sol if t_sol > 0 else None)
@@ -279,7 +324,14 @@ def analizar(s, D, W0, W1, dias):
     ra = S(dr, "activityState")
     red_muerto = bool(ra) and ra[-1][1] == "noResponse"
     rv = [(t, v) for t, v in S(dr, "voltageA") if isinstance(v, float)]
-    red_presente = bool(rv) and W1 - rv[-1][0] <= 45 * 60000 and rv[-1][1] >= 90 and not red_muerto
+    # primera muestra del inversor sin entrada de red (< 5 V) en la racha actual
+    t_caida = None
+    for t, v in reversed(vga):
+        if isinstance(v, float) and v >= 5:
+            break
+        t_caida = t
+    # el medidor de red solo cuenta como "presente" si tiene una muestra igual o posterior a la caída del inversor: un medidor sin tensión deja de enviar datos y su último valor ("123 V") es viejo
+    red_presente = bool(rv) and W1 - rv[-1][0] <= 45 * 60000 and rv[-1][1] >= 90 and not red_muerto and (t_caida is None or rv[-1][0] >= t_caida - 120000)
     # inversor sin entrada de red mientras el medidor de red marca tensión: inversor aislado, no es un corte de red
     R["aislado"] = bool(vg_bajo and red_presente)
     R["live"] = live; R["vg_bajo"] = vg_bajo; R["soc_ult"] = soc[-1] if soc else None
@@ -306,6 +358,10 @@ def analizar(s, D, W0, W1, dias):
             t_ini = t
         cortes.append(dict(a=t_ini if t_ini else W1 - 15 * 60000, b=None, abierto=True, ant=False, estimado=True))
     R["en_curso"] = en_curso
+    # tensión en la casa (medidor solar, lado respaldado) durante un corte en curso: si hay tensión, el BESS está respaldando
+    sv = [(t, v) for t, v in S(ds, "voltageA") if isinstance(v, float)]
+    R["sol_v"] = sv[-1] if sv else None
+    R["bess"] = bool(en_curso and sv and W1 - sv[-1][0] <= 20 * 60000 and sv[-1][1] >= 130)
     # --- huecos de tensión en la casa (medidor solar)
     ev_sol = [(t, v) for t, v in S(ds, "event") if v in ("po", "pr")]
     huecos = []
@@ -316,6 +372,7 @@ def analizar(s, D, W0, W1, dias):
         if fin_h < W0 or a > W1:
             continue
         huecos.append(dict(a=a, b=b, d=(fin_h - a) / 1000))
+    bpw = sorted((t, v) for r in s["inv"] for t, v in S(D.get(r["id"], {}), "BattPower") if isinstance(v, (int, float)))
     # --- respaldo por corte
     usados = set()
     for c in cortes:
@@ -335,13 +392,15 @@ def analizar(s, D, W0, W1, dias):
         c["perc"] = sum(h["d"] for h in hu)
         c["caer"] = sum(h["d"] for h in hu if h["tipo"] == "al caer")
         c["volver"] = sum(h["d"] for h in hu if h["tipo"] in ("al volver", "al reconectar"))
-        dentro = sum(h["d"] for h in hu if c["b"] is None or h["a"] < c["b"])
-        c["cob"] = max(0.0, 100.0 * (1 - dentro / c["dur"])) if c["dur"] and c["dur"] >= 60 else None
+        # regla del equipo: respaldo = (tiempo medidor de red − tiempo medidor solar) / tiempo medidor de red, en cada corte (incluye los huecos al caer, a mitad y al volver)
+        c["cob"] = max(0.0, 100.0 * (1 - c["perc"] / c["dur"])) if c["dur"] else None
         # batería durante el corte
         s0 = antes(soc, c["a"]) or (soc[0] if soc else None)
         en = [v for t, v in soc if c["a"] <= t <= (c["b"] if c["b"] is not None else W1)]
         s1 = despues(soc, c["b"]) if c["b"] is not None else (soc[-1] if soc else None)
         c["soc0"] = s0[1] if s0 else None; c["socmin"] = min(en) if en else None; c["soc1"] = s1[1] if s1 else None
+        # veredicto de respaldo: tipo de hueco en el medidor solar + quién alimenta la casa + causa de la caída
+        c["veredicto"], c["fuente"], c["causa"] = veredicto_respaldo(c, bpw, soc, W1)
     R["cortes"] = [c for c in cortes if c["a"] is not None]
     R["huecos_fuera"] = [h for h in huecos if id(h) not in usados]
     R["huecos"] = huecos
@@ -354,11 +413,11 @@ def analizar(s, D, W0, W1, dias):
     ev_i = [(t, v) for t, v in S(di, "event") if W0 <= t <= W1]
     R["est"] = est; R["codigos"] = ev_i
     # --- generación FV por día (contador diario energyPD, Wh)
-    pd = S(di, "energyPD")
-    R["pv"] = {}
+    R["pv"] = {}; R["dem"] = {}
     for d0, d1 in dias:
-        v = [x for t, x in pd if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
-        R["pv"][d0] = max(v) / 1000 if v else None
+        b = bal_dia(s, d0, d1)
+        R["pv"][d0] = b[0] if b else None
+        R["dem"][d0] = b[1] if b else None
     R["pv_hist"] = {}
     # --- energía en medidores (kWh): exportación e importación de red, consumo del lado respaldado
     aE = S(dr, "energyAE"); aI = S(dr, "energyAI"); cI = S(ds, "energyAI")
@@ -424,6 +483,10 @@ def main():
     with cf.ThreadPoolExecutor(8) as ex:
         for i, d in ex.map(lambda t: serie(*t), tareas2):
             HPD[i] = S(d, "energyPD")
+    tareas3 = [(r["id"], "CenergyAI,CenergyAE", h0 - 3600000, W1 + 600000) for s in SYS.values() for r in s["red"] + s["solar"]]
+    with cf.ThreadPoolExecutor(8) as ex:
+        for i, d in ex.map(lambda t: serie(*t), tareas3):
+            HMC[i] = {"CenergyAI": S(d, "CenergyAI"), "CenergyAE": S(d, "CenergyAE")}
     # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV)
     manual_ex, manual_in = cargar_exclusiones()
     EXCLUIDOS.clear()
@@ -436,7 +499,7 @@ def main():
     # telemetría
     IK = "invrun,invstate,voltGridA,voltGridB,voltGridC,BattSOC,BattPower,energyPD,activityState,event"
     MR = "event,voltageA,activityState,FlagStaProf,energyAE,energyAI,powerAI"
-    MS = "event,activityState,energyAI"
+    MS = "event,activityState,energyAI,voltageA"
     tipo = {dv["id"]["id"]: dv["type"] for dv in devs}
     tareas = []
     for s in SYS.values():
@@ -457,13 +520,17 @@ def main():
         R = analizar(s, D, W0, W1, dias)
         inv, _ = elegir_activo(s["inv"], D, ["BattSOC", "voltGridA", "activityState"])
         hist = {}
-        if inv:
+        if True:
             for q in range(1, 10):
                 d0 = dias[0][0] - q * 86400000
-                v = [x for t, x in HPD.get(inv["id"], []) if d0 + 5 * 3600000 <= t <= d0 + 21 * 3600000 and isinstance(x, float)]
-                hist[d0] = max(v) / 1000 if v else None
+                b = bal_dia(s, d0, d0 + 86400000)
+                hist[d0] = b[0] if (b and b[0] > 0) else None
         R["pv_hist"] = hist
         RS.append(R)
+    if os.environ.get("DUMP_PK"):
+        import pickle; pickle.dump((RS, D, W0, W1), open(os.environ["DUMP_PK"], "wb"))
+    if os.environ.get("DUMP_SV"):
+        json.dump([dict(casa=R["sys"]["casa"], ciudad=R["sys"]["ciudad"], en_curso=R["en_curso"], sol_v=R.get("sol_v"), bess=R.get("bess"), W1=W1) for R in RS], open(os.environ["DUMP_SV"], "w"))
     exec(open(os.path.join(HERE, "reporte_html.py"), encoding="utf8").read(), globals())
     generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons)
 

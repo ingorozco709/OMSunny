@@ -1,6 +1,8 @@
 # Genera el HTML del reporte diario. Se ejecuta dentro de reporte_diario.py (comparte sus funciones y constantes).
 
 EXTRA_CSS = """
+table.dt th{font-size:9.5px;letter-spacing:0;line-height:1.5;padding:10px 8px 8px;min-width:70px;white-space:nowrap}
+table.dt th:first-child{min-width:120px}
 table.dt td,table.dt th{padding-inline:6px;font-size:12.5px} table.dt th{white-space:normal;line-height:1.25;vertical-align:bottom}
 table.dt td.n{white-space:nowrap} table.dt td small{white-space:nowrap}
 tr.ciudad td{background:var(--line2);font-family:var(--f-d);font-weight:600;font-size:14px;letter-spacing:.02em}
@@ -12,6 +14,8 @@ ul.pts li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;max-widt
 ul.pts li .pill{flex:none;margin-top:2px}
 details{border:1px solid var(--line);border-radius:6px;padding:10px 14px;background:var(--surface)}
 details summary{cursor:pointer;font-weight:600}
+table.dt th{font-size:9.5px;letter-spacing:0;line-height:1.5;padding:10px 8px 8px;min-width:70px;white-space:nowrap}
+table.dt th:first-child{min-width:120px}
 """
 
 
@@ -77,10 +81,13 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
                 hist.append((v / s["cap"]) / m)
         R["idx_base"] = st.median(hist) if len(hist) >= 3 else None
         R["sy"] = (R["pv_tot"] / ndias / s["cap"]) if (R["pv_tot"] is not None and cap_ok(R)) else None
+        dd = [v for v in list(R["pv"].values()) + list(R["pv_hist"].values()) if v is not None]
+        R["gen_dia_med"] = st.mean(dd) if dd else None
+        R["sy_anual"] = (R["pv_tot"] / ndias / s["cap"] * 365) if (R["pv_tot"] is not None and cap_ok(R)) else None
         R["ratio"] = (R["idx"] / R["idx_base"]) if (R["idx"] is not None and R["idx_base"]) else None
         flag = None
         if R["pv_tot"] is None:
-            flag = ("off", "sin datos")
+            flag = ("off", "sin cierre diario del medidor")
         elif R["pv_tot"] == 0:
             flag = ("crit", "sin producción")
         elif R["ratio"] is not None and R["ratio"] < 0.75:
@@ -89,7 +96,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
             flag = ("warn", "baja de forma sostenida")
         R["flag"] = flag
     pv_total = sum(R["pv_tot"] for R in RS if R["pv_tot"] is not None)
-    # patrón de la flota: media de la generación total de los días previos con la misma lista de sistemas
+    # patrón del portafolio Sunny: media de la generación total de los días previos con la misma lista de sistemas
     prev_tot = []
     keys_prev = sorted({k for R in RS for k in R["pv_hist"]})
     for k in keys_prev:
@@ -101,6 +108,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     # ------------------------------------------------ exportación
     exp_tot = sum(R["exp"]["total"] for R in RS if R["exp"].get("total") is not None)
     imp_tot = sum(R["imp"]["total"] for R in RS if R["imp"].get("total") is not None)
+    for R in RS:
+        g_ = R["pv_tot"]; dd_ = [v for v in R["dem"].values()]
+        R["cons_cli"] = sum(dd_) if (dd_ and all(v is not None for v in dd_)) else None
+        R["cob_sol"] = (100 * g_ / R["cons_cli"]) if (R["cons_cli"] and R["cons_cli"] > 0) else None
+    _ok = [R for R in RS if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
+    cob_flota = (100 * sum(R["pv_tot"] for R in _ok) / sum(R["cons_cli"] for R in _ok)) if _ok else None
+    _cy = [R for R in RS if R["pv_tot"] is not None and cap_ok(R)]
+    yield_flota = (sum(R["pv_tot"] for R in _cy) / ndias / sum(R["sys"]["cap"] for R in _cy) * 365) if _cy else None
     sin_exp = [R for R in RS if R["exp"].get("total") is not None and R["exp"]["total"] < 0.05]
 
     # ------------------------------------------------ comunicación (último dato de cada dispositivo)
@@ -145,13 +160,13 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     else:
         P.append(("ok", "Interrupciones", f"Ningún sistema registró cortes de red en la ventana ({fmt((W1-W0)/1000)})."))
     # respaldo
-    cs = [c for R in RS for c in R["cortes"] if c.get("dur") and c["dur"] >= 60]
+    cs = [c for R in RS for c in R["cortes"] if c.get("dur")]
     if cs:
         tot_dur = sum(c["dur"] for c in cs); tot_perc = sum(min(c["perc"], c["dur"]) for c in cs)
         cob = 100 * (1 - tot_perc / tot_dur) if tot_dur else None
         sinhueco = sum(1 for c in cs if c["perc"] == 0)
         largos = sorted(((c["perc"], R, c) for R in RS for c in R["cortes"] if c.get("dur") and c["perc"] >= 300), key=lambda x: -x[0])
-        txt = f"La casa mantuvo tensión en {dec(cob, 1)} % del tiempo de corte; {sinhueco} de {len(cs)} cortes largos no dejaron ningún hueco."
+        txt = f"La casa mantuvo tensión en {dec(cob, 1)} % del tiempo de corte; {sinhueco} de {len(cs)} cortes no dejaron ningún hueco."
         if largos:
             txt += f" Huecos de 5 min o más en {len(set(id(R) for _, R, _ in largos))} sistemas; el mayor, {largos[0][1]['sys']['casa']} con {fmt(largos[0][0])}."
         P.append(("warn" if largos else "ok", "Respaldo", txt))
@@ -182,7 +197,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
         cmp_ = ""
         if pv_pat:
             cmp_ = f" ({'+' if pv_total >= pv_pat else '−'}{dec(abs(100*(pv_total/pv_pat-1)), 0)} % frente a la mediana de los días previos)"
-        P.append(("ok" if not bajas else "warn", "Rendimiento", f"Generación FV de la flota: {dec(pv_total, 0)} kWh en {ndias} {'día' if ndias == 1 else 'días'}{cmp_}." + (f" {len(bajas)} sistemas con producción baja: " + ", ".join(f"{R['sys']['casa']} ({R['flag'][1]})" for R in sorted(bajas, key=lambda R: R['ratio'] if R['ratio'] is not None else 0)[:8]) + ("…" if len(bajas) > 8 else "") + "." if bajas else "")))
+        P.append(("ok" if not bajas else "warn", "Rendimiento", f"Generación FV del portafolio Sunny: {dec(pv_total, 0)} kWh en {ndias} {'día' if ndias == 1 else 'días'}{cmp_}. Yield proyectado a un año: {dec(yield_flota, 0) if yield_flota else '—'} kWh/kWp·año; cobertura solar: {dec(cob_flota, 0) if cob_flota is not None else '—'} %." + (f" {len(bajas)} sistemas con producción baja: " + ", ".join(f"{R['sys']['casa']} ({R['flag'][1]})" for R in sorted(bajas, key=lambda R: R['ratio'] if R['ratio'] is not None else 0)[:8]) + ("…" if len(bajas) > 8 else "") + "." if bajas else "")))
     # exportación
     if exp_tot:
         top = sorted((R for R in RS if R["exp"].get("total")), key=lambda R: -R["exp"]["total"])[:3]
@@ -192,6 +207,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
         P.append(("warn", "Comunicación", f"{len(sin_datos_inv)} sistemas sin datos del inversor en las últimas 2 h ({', '.join(R['sys']['casa'] for R in sin_datos_inv[:10])}{'…' if len(sin_datos_inv) > 10 else ''}); {len(stale)} dispositivos con último dato de más de 2 h."))
     else:
         P.append(("ok", "Comunicación", "Todos los inversores reportaron en las últimas 2 h."))
+    _mi = cargar_exclusiones()[1]
+    _bajos = sorted((R for R in RS if R["sys"]["casa"].strip().lower() in _mi and R["pv_tot"] is not None and R["pv_tot"] < 5), key=lambda R: num_casa(R["sys"]["casa"]))
+    if _bajos:
+        P.append(("warn", "Casas en operación plena", "Estas casas se incluyen como operando plenamente, pero el contador de su inversor marca muy poca generación en la ventana: " + "; ".join(f"{R['sys']['casa']} {dec(R['pv_tot'], 1)} kWh" for R in _bajos) + ". Reducen el yield y la cobertura del portafolio Sunny; conviene confirmar que sus paneles estén conectados al inversor."))
     orden = {"crit": 0, "warn": 1, "ok": 2}
     P.sort(key=lambda p: orden[p[0]])
     PILL = {"crit": "crit", "warn": "warn", "ok": "okp"}
@@ -202,12 +221,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
 
     # KPIs
     k_sis = f'<div class="kpi {"k-crit" if en_curso else ("k-warn" if con_cortes else "k-ok")}"><div class="v">{len(con_cortes)} <small>de {n_sys}</small></div><div class="l">sistemas con cortes de red en la ventana ({total_cortes} cortes en {len(EV)} eventos).{" " + str(len(en_curso)) + " siguen sin red." if en_curso else ""}</div></div>'
-    k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV de la flota en {ndias} {"día" if ndias == 1 else "días"}{(" (patrón " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
+    k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV del portafolio Sunny en {ndias} {"día" if ndias == 1 else "días"}{(" (patrón " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
     k_exp = f'<div class="kpi"><div class="v">{dec(exp_tot, 0)} <small>kWh</small></div><div class="l">de energía activa exportada a la red; importada {dec(imp_tot, 0)} kWh.</div></div>'
     cob_txt = "—"
     if cs:
         cob_txt = dec(cob, 1) + " %"
     k_res = f'<div class="kpi {"k-warn" if cs and cob is not None and cob < 99 else ""}"><div class="v">{cob_txt}</div><div class="l">del tiempo de corte con tensión en la casa (respaldo){"" if cs else ": sin cortes largos"}.</div></div>'
+    k_yield = f'<div class="kpi"><div class="v">{dec(yield_flota, 0) if yield_flota else "—"} <small>kWh/kWp·año</small></div><div class="l">de yield proyectado a un año: generación diaria real de {len(_cy)} sistemas dividida entre su potencia pico instalada en DC (suma de kWp), por 365.</div></div>'
+    k_cob = f'<div class="kpi"><div class="v">{dec(cob_flota, 0) if cob_flota is not None else "—"} <small>%</small></div><div class="l">de cobertura solar del portafolio Sunny: generación FV dividida entre el consumo de los clientes. La generación es el balance de medidores y el consumo es la demanda del medidor solar.</div></div>'
     # puntos
     li = "".join(f'<li>{_pill(PILL[n], t)}<span>{esc(x)}</span></li>' for n, t, x in P)
 
@@ -224,6 +245,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
 
     # interrupciones y respaldo por sistema
     rows = []
+    def soc_uno(x):
+        return "—" if x is None else f"{x:.0f} %"
     def soc_txt(c):
         a, m, b = c.get("soc0"), c.get("socmin"), c.get("soc1")
         f = lambda x: "—" if x is None else f"{x:.0f}"
@@ -235,8 +258,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
         cobs = [c["cob"] for c in cc if c["cob"] is not None]
         estado = _pill("crit", "sin red") if R["en_curso"] else ""
         cls = "r0" if R["en_curso"] else ("r1" if perc >= 300 else "")
-        rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(mayor["dur"] or 0)}<small>{hbd(mayor["a"])}</small></td><td class="n">{fmt(perc) if perc else "—"}</td><td class="n">{(dec(min(cobs), 1) + " %") if cobs else "—"}</td><td class="n">{soc_txt(mayor)}</td><td>{estado}</td></tr>')
-    sis_head = '<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Mayor corte</th><th class="n">Tiempo que<br>vio la casa</th><th class="n">Respaldo<br>(peor corte)</th><th class="n">SOC inicio → mín → fin<br>(mayor corte)</th><th>Ahora</th>'
+        _g = {"Caída durante el respaldo": 3, "Sin respaldo": 2, "Respaldo total con transferencia": 1, "Respaldo total": 0}
+        cpeor = max(cc, key=lambda c: (_g.get(c.get("veredicto"), 0), c["dur"] or 0))
+        vr = cpeor.get("veredicto") or ""
+        niv = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}.get(vr, "off")
+        vr_det = " · ".join(x for x in ("alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
+        celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
+        rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(mayor["dur"] or 0)}<small>{hbd(mayor["a"])}</small></td><td class="n">{fmt(perc) if perc else "—"}</td><td class="n">{(dec(min(cobs), 1) + " %") if cobs else "—"}</td><td class="n">{soc_uno(mayor.get("soc0"))}</td><td class="n">{soc_uno(mayor.get("soc1"))}</td><td>{estado}</td><td>{celda_resp}</td></tr>')
+    sis_head = '<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Mayor corte</th><th class="n">Tiempo que<br>vio la casa</th><th class="n">Respaldo<br>peor corte</th><th class="n">SOC al inicio<br>mayor corte</th><th class="n">SOC al final<br>mayor corte</th><th>Ahora</th><th>Veredicto<br>de respaldo</th>'
     sec_sis = tabla(sis_head, rows, 900) if rows else ""
     # detalle por corte
     rows = []
@@ -257,21 +286,21 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
             cols = "".join(f'<td class="n">{_kwh(R["pv"].get(d0))}</td>' for d0, _ in dias)
             fl = _pill({"crit": "crit", "warn": "warn", "off": "off"}[R["flag"][0]], R["flag"][1]) if R["flag"] else ""
             bar = f'<span class="bar {"crit" if R["flag"] and R["flag"][0] == "crit" else ("warn" if R["flag"] and R["flag"][0] == "warn" else "")}" style="width:{max(2, 120 * (R["pv_tot"] or 0) / mx_pv):.0f}px"></span>'
-            rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 0) if s["cap"] else "—"} kW</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{_kwh(R["sy"], 2)}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}{bar if not fl else ""}</td></tr>')
-    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">kWh por kW<br>y día</th><th class="n">Frente a su<br>patrón</th><th></th>'
+            rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 2) if s["cap"] else "—"} kWp</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}{bar if not fl else ""}</td></tr>')
+    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente a su<br>patrón</th><th></th>'
     sec_pv = tabla(pv_head, rows, 760 + 60 * ndias)
 
     # exportación
     rows = []
     ex_max = max([R["exp"]["total"] for R in RS if R["exp"].get("total")] or [1])
     for c in ciudades:
-        rows.append(f'<tr class="ciudad"><td colspan="{6 + ndias}">{esc(c.title())}</td></tr>')
+        rows.append(f'<tr class="ciudad"><td colspan="{8 + ndias}">{esc(c.title())}</td></tr>')
         for R in sorted([R for R in RS if R["sys"]["ciudad"] == c], key=lambda R: -(R["exp"].get("total") or 0)):
             s = R["sys"]; t = R["exp"].get("total")
             cols = "".join(f'<td class="n">{_kwh(R["exp"].get(d0), 2)}</td>' for d0, _ in dias)
             share = (100 * t / R["pv_tot"]) if (t is not None and R["pv_tot"]) else None
-            rows.append(f'<tr><td><b>{esc(s["casa"])}</b></td>{cols}<td class="n"><b>{_kwh(t, 2)}</b></td><td class="n">{_kwh(R["imp"].get("total"), 1)}</td><td class="n">{_kwh(R["cons"].get("total"), 1)}</td><td class="n">{(dec(share, 1) + " %") if share is not None else "—"}</td><td><span class="bar" style="width:{max(2, 120 * (t or 0) / ex_max):.0f}px"></span></td></tr>')
-    ex_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th><th class="n">Consumo lado<br>respaldado kWh</th><th class="n">Exportada /<br>generada</th><th></th>'
+            rows.append(f'<tr><td><b>{esc(s["casa"])}</b></td>{cols}<td class="n"><b>{_kwh(t, 2)}</b></td><td class="n">{_kwh(R["imp"].get("total"), 1)}</td><td class="n">{_kwh(R["cons"].get("total"), 1)}</td><td class="n">{(dec(share, 1) + " %") if share is not None else "—"}</td><td class="n">{_kwh(R["cons_cli"], 1)}</td><td class="n"><b>{(dec(R["cob_sol"], 0) + " %") if R["cob_sol"] is not None else "—"}</b></td><td><span class="bar" style="width:{max(2, 120 * (t or 0) / ex_max):.0f}px"></span></td></tr>')
+    ex_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th><th class="n">Consumo lado<br>respaldado kWh</th><th class="n">Exportada /<br>generada</th><th class="n">Consumo del cliente<br>kWh</th><th class="n">Cobertura<br>solar</th><th></th>'
     sec_ex = tabla(ex_head, rows, 760 + 60 * ndias)
 
     # comunicación
@@ -285,12 +314,15 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     for c in ciudades:
         g = [R for R in RS if R["sys"]["ciudad"] == c]
         pvc = sum(R["pv_tot"] for R in g if R["pv_tot"] is not None)
-        sys_ = [R["sy"] for R in g if R["sy"]]
+        _gy = [R for R in g if R["pv_tot"] is not None and cap_ok(R)]
+        yc = (sum(R["pv_tot"] for R in _gy) / ndias / sum(R["sys"]["cap"] for R in _gy) * 365) if _gy else None
+        _g = [R for R in g if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
+        cobc = (100 * sum(R["pv_tot"] for R in _g) / sum(R["cons_cli"] for R in _g)) if _g else None
         exc = sum(R["exp"]["total"] for R in g if R["exp"].get("total") is not None)
         sd = sum(1 for R in g if R["ult"]["inv"] is None or W1 - R["ult"]["inv"] > 2 * 3600000)
         cuts = sum(len(R["cortes"]) for R in g)
-        rows.append(f'<tr><td><b>{esc(c.title())}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{cuts}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td><td class="n">{dec(pvc, 0)}</td><td class="n">{dec(st.median(sys_), 2) if sys_ else "—"}</td><td class="n">{dec(exc, 1)}</td><td class="n">{sd}</td></tr>')
-    sec_ciu = tabla('<th>Ciudad</th><th class="n">Sistemas</th><th class="n">Con<br>cortes</th><th class="n">Cortes</th><th class="n">Sin red<br>ahora</th><th class="n">Generación<br>FV kWh</th><th class="n">kWh por kW<br>y día (mediana)</th><th class="n">Exportada<br>kWh</th><th class="n">Sin datos<br>del inversor</th>', rows, 760)
+        rows.append(f'<tr><td><b>{esc(c.title())}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{cuts}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td><td class="n">{dec(pvc, 0)}</td><td class="n">{dec(yc, 0) if yc else "—"}</td><td class="n">{(dec(cobc, 0) + " %") if cobc is not None else "—"}</td><td class="n">{dec(exc, 1)}</td></tr>')
+    sec_ciu = tabla('<th>Ciudad</th><th class="n">Sistemas</th><th class="n">Con<br>cortes</th><th class="n">Cortes</th><th class="n">Sin red<br>ahora</th><th class="n">Generación<br>FV kWh</th><th class="n">Yield anual proyectado<br>kWh/kWp·año</th><th class="n">Cobertura<br>solar</th><th class="n">Exportada<br>kWh</th>', rows, 760)
 
     # por día (lunes)
     sec_dia = ""
@@ -323,6 +355,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
   {k_sis}
   {k_res}
   {k_pv}
+  {k_yield}
+  {k_cob}
   {k_exp}
 </div>
 
@@ -345,7 +379,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     {sec_ev}
     {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
     {sec_det}
-    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = porcentaje del corte en que la casa mantuvo tensión. Sin hueco, por criterio del equipo, el cliente no percibió el corte.</p>
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte.</p>
   </div>
 </section>
 
@@ -353,7 +387,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
   <h2>Rendimiento de los sistemas</h2>
   <div class="card">
     {sec_pv}
-    <p class="note" style="margin-top:10px">Generación FV del contador diario del inversor (<code>energyPD</code>). «kWh por kW y día» divide por la capacidad nominal del inversor, no por los kWp instalados. «Frente a su patrón» compara el índice del sistema (su kWh por kW sobre la mediana de su ciudad ese día) con su mediana de los 9 días anteriores; así se descuenta el efecto del clima.</p>
+    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente a su patrón» compara el índice del sistema (su kWh por kW sobre la mediana de su ciudad ese día) con su mediana de los 9 días anteriores; así se descuenta el efecto del clima.</p>
   </div>
 </section>
 
@@ -361,7 +395,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
   <h2>Exportación de energía activa</h2>
   <div class="card">
     {sec_ex}
-    <p class="note" style="margin-top:10px">Exportada e importada, del medidor de red (<code>energyAE</code> y <code>energyAI</code>). Consumo del lado respaldado, del medidor solar. No incluye cargas fuera del puerto de respaldo.</p>
+    <p class="note" style="margin-top:10px">Exportada e importada, del medidor de red (<code>energyAE</code> y <code>energyAI</code>). Consumo del cliente = demanda del día calendario en el medidor solar; cobertura solar = generación / consumo del cliente. La generación es el balance de medidores, así que incluye pérdidas y la energía que pasa por la batería. Importada y exportada de la tabla son las de la ventana de 24 h.</p>
   </div>
 </section>
 
@@ -378,7 +412,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>
-    <p>No se incluyen los pilotos ni las casas sin generación FV, que por ahora solo tienen instaladas las baterías de respaldo ({len(EXCLUIDOS)} sistemas fuera del reporte).</p>
+    <p>Si a un medidor aún no le llegó el cierre diario de las 00:00 (hoy, Casa 9G y Casa 108), su generación del día queda sin calcular y no se reemplaza por otro dato. La generación de todos los sistemas se calcula con el balance de medidores. Queda fuera la casa que solo tiene baterías instaladas, Casa 447p ({len([x for x in EXCLUIDOS if x[2] != 'piloto'])} casa fuera del reporte).</p>
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
@@ -387,7 +421,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     with open(args.salida, "w", encoding="utf8") as f:
         f.write(pagina)
     resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
-                   pv_kwh=round(pv_total), exp_kwh=round(exp_tot), imp_kwh=round(imp_tot), puntos=[f"{t}: {x}" for n, t, x in P])
+                   pv_kwh=round(pv_total), yield_anual=round(yield_flota) if yield_flota else None, cobertura_pct=round(cob_flota, 1) if cob_flota is not None else None, exp_kwh=round(exp_tot), imp_kwh=round(imp_tot), puntos=[f"{t}: {x}" for n, t, x in P])
     with open(args.json, "w", encoding="utf8") as f:
         json.dump(resumen, f, ensure_ascii=False, indent=1)
     print(f"escrito {args.salida} ({len(pagina)} caracteres) y {args.json}")

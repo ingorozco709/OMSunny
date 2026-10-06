@@ -270,3 +270,15 @@ Reportes Operativos Periódicos.
 - Casa 447p solo tiene baterías instaladas y se excluye de generación, yield y cobertura.
 - Si a un medidor le falta el cierre diario, la generación de esa casa queda sin calcular ("sin
   cierre diario del medidor"); no se reemplaza por otro dato.
+
+## 2026-10-06 — Veredicto de respaldo por interrupción y cortes en curso
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Decisiones del usuario:**
+- El umbral de 130 V en el medidor solar para decir "BESS respaldando" **no funciona**: no se cumple en todos los sistemas al pasar a off-grid (Casa 99 respaldó con 119–123 V). La columna "Estado de la casa" se eliminó del reporte. No volver a clasificar el respaldo por un valor de tensión puntual.
+- El respaldo se decide por corte con la serie completa (ver `reporte-diario/README.md`, "Veredicto de respaldo por corte"): hueco en el medidor solar (al caer ≤ 2 min es transferencia; "durante" ≥ 2 min es caída), quién alimenta (`BattPower`: positivo batería, negativo solar cargando) y causa (SOC ≤ 12 % = batería agotada).
+- Cuando todos los sistemas vieron una interrupción de la empresa de energía, se actualiza el reporte con el corte en curso: un sistema está en corte si su inversor marca `voltGrid* < 5 V` y su medidor de red no tiene dato posterior a la caída (el medidor sin tensión deja de enviar; comparar timestamps, no el último valor).
+- Casos de referencia (6-oct, Cali, corte desde las 09:30): Casa 99 respaldó 30 min y cayó 20 min con SOC 10 % (hueco `po` 10:00:27, `pr` 10:20:07), luego se recuperó con el solar cargando la batería a 4 kW; Casa 35 cayó 155 s con SOC 96 % (revisar inversor).
+
+**Dónde está el código:** `reporte-diario/` (rama `claude/loving-hawking-iwftvn`). Abrir una sesión nueva para reportes de interrupciones: leer `reporte-diario/README.md` y este archivo antes de generar.
