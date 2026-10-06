@@ -291,6 +291,6 @@ Reportes Operativos Periódicos.
 - Las casas que solo tienen baterías (hoy Casa 447p) no suman en generación, yield, cobertura ni exportación, pero **sí se reportan**: tabla propia "Casa solo con baterías (sin FV)" con cortes, tiempo sin red, tiempo que vio la casa, respaldo del peor corte, SOC inicio → mín → fin del mayor corte, SOC actual y estado "Ahora". Entran todas las excluidas por `exclusiones.json` o por la regla automática de "sin generación FV"; los pilotos siguen excluidos de todo.
 - Sus eventos de inversor (p. ej. `igf`) cuentan en el punto "Inversores".
 - Punto "Baterías en reserva": todos los sistemas (con o sin corte, incluidos los solo-baterías) con SOC de 22 % o menos en el último dato disponible al corte del reporte. El SOC "actual" es el último dato del inversor y se muestra con su hora, no la muestra fija de las 07:00.
-- `potencia_instalada.json` sale de `Casas_V2.xlsx` (2026-10-06): Casas 412p y 425p pasan de 2,975 a 5,36 kWp. La fila "Piloto Promigas" del archivo no se incluye (pilotos excluidos).
+- `potencia_instalada.json` sale de `Casas_V2.xlsx` (2026-10-06): Casas 412p y 425p pasan de 2,975 a 5,36 kWp. El usuario confirmó que ambas tienen 9 paneles (el archivo decía 5); 9 × 0,595 = 5,355 kWp, que el archivo redondea a 5,36. La fila "Piloto Promigas" del archivo no se incluye (pilotos excluidos).
 
 **Dónde está el código:** `reporte-diario/` (`reporte_diario.py`, `reporte_html.py`).

@@ -15,7 +15,7 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 
 ## Reglas de cálculo (todas decididas por el usuario; detalle en `om-agency/references/reglas-aprendidas.md`)
 - **Generación** = balance de medidores con cierres diarios de las 00:00 Bogotá: demanda del medidor solar (`CenergyAI`) − importada + exportada del medidor de red. Nunca `energyPD` del inversor (subestima ~10× en inversores nuevos). Sin cierre diario del medidor: "sin cierre diario del medidor", fuera de las sumas.
-- **Yield anual proyectado** = Σ generación diaria real ÷ Σ kWp instalados (`potencia_instalada.json`, de `Casas.xlsx`, pico DC, no kW de inversor) × 365.
+- **Yield anual proyectado** = Σ generación diaria real ÷ Σ kWp instalados (`potencia_instalada.json`, de `Casas_V2.xlsx`, pico DC, no kW de inversor; Casas 412p y 425p: 9 paneles, 5,36 kWp) × 365.
 - **Cobertura solar** = generación ÷ consumo de los clientes (demanda del medidor solar).
 - **Corte en curso**: el inversor sin red (`voltGrid* < 5 V`) y el medidor de red sin dato posterior a la caída (un medidor sin tensión deja de enviar: se compara el timestamp, no el último valor).
 - **Veredicto de respaldo por corte** (`veredicto_respaldo` en `reporte_diario.py`): sin hueco en el medidor solar → *Respaldo total*; solo hueco "al caer" de ≤ 2 min (transferencia a isla) → *Respaldo total con transferencia*; hueco "durante" ≥ 2 min → *Caída durante el respaldo* (causa: batería agotada si SOC ≤ 12 %, si no "revisar inversor"); corte más corto que la transferencia y cobertura < 5 % → *Sin respaldo*. "Alimenta": mediana de `BattPower` en el corte (>200 W batería, < −200 W solar, si no solar + batería llena). En cortes abiertos el veredicto es provisional.
@@ -42,5 +42,4 @@ Requiere las variables `METRUM_API_URL`, `METRUM_USERNAME` y `METRUM_PASSWORD`. 
 
 ## Pendientes conocidos
 - Casas 9G y 108 sin cierre diario del 6-oct en el medidor: quedan sin generación hasta que llegue el cierre.
-- `potencia_instalada.json` se actualizó con `Casas_V2.xlsx` (Casas 412p y 425p pasaron de 2,975 a 5,36 kWp). En ese archivo la columna de paneles de ambas sigue en 5 (5 × 0,595 kWp = 2,975): falta confirmar la cantidad de paneles.
 - Depuración: `DUMP_SV=f.json` y `DUMP_PK=f.pkl` guardan datos intermedios sin tocar el reporte.
