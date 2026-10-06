@@ -242,3 +242,31 @@ tiene datos en esa interrupción se escribe "s/d"; no se calcula ni se asume 0 %
 **Relación con reglas anteriores:** el "tiempo sin tensión" que ve la casa (suma de los
 huecos del medidor solar) se sigue mostrando en los reportes de interrupciones; el
 respaldo se agrega junto a él.
+
+## 2026-10-06 — Vocabulario de los reportes: no usar "flota"
+
+**Aplica a:** todos los especialistas, en todo texto que se entregue (reportes, resúmenes, mensajes).
+
+**Regla (instrucción del usuario, "siempre"):** reemplazar la palabra "flota" por "conjunto de
+sistemas" o "portafolio Sunny". Ejemplos: "cobertura solar del portafolio Sunny", "generación FV
+del conjunto de sistemas". Los nombres de los especialistas (p. ej. "Monitor de Salud de Flota")
+son nombres internos de la skill y no se muestran al usuario en los reportes.
+
+## 2026-10-06 — Cálculo de generación, yield y cobertura de los reportes
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador de
+Reportes Operativos Periódicos.
+
+**Reglas (instrucción del usuario, "siempre"):**
+- Generación diaria = balance de medidores con los cierres diarios de las 00:00: demanda del
+  medidor solar (`CenergyAI`) − importada + exportada del medidor de red (`CenergyAI`/`CenergyAE`).
+  No se usa el contador del inversor (`energyPD`): en casas con inversores nuevos marca unas 10
+  veces menos (verificado el 2026-10-05 contra la app de Deye en la Casa 86p: 13,1 kWh por
+  balance frente a 1,4 kWh del inversor y 14,0 kWh en Deye).
+- Cobertura solar = generación ÷ consumo del cliente (demanda del medidor solar).
+- Yield proyectado anual = suma de la generación diaria real ÷ suma de la potencia instalada
+  pico en DC (kWp) × 365, sin promedios. La potencia sale del archivo de sistemas del usuario
+  (`Casas.xlsx`, copia en `reporte-diario/potencia_instalada.json`), no de `invcap` del inversor.
+- Casa 447p solo tiene baterías instaladas y se excluye de generación, yield y cobertura.
+- Si a un medidor le falta el cierre diario, la generación de esa casa queda sin calcular ("sin
+  cierre diario del medidor"); no se reemplaza por otro dato.
