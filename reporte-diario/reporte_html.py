@@ -280,12 +280,11 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         tot = sum(c["dur"] or 0 for c in cc); perc = sum(c["perc"] for c in cc)
         estado = _pill("crit", "sin red") if R["en_curso"] else ""
         cls = "r0" if R["en_curso"] else ("r1" if perc >= 300 else "")
-        _g = {"Caída durante el respaldo": 4, "Sin respaldo": 3, "Retardo de transferencia": 2, "Respaldo total con transferencia": 1, "Respaldo total": 0}
-        cpeor = max(cc, key=lambda c: (_g.get(c.get("veredicto"), 0), c["dur"] or 0))
+        cpeor = ultimo                      # el veredicto y su detalle son los del último corte, el mismo de la columna "Último corte"
         vr = cpeor.get("veredicto") or ""
         niv = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Retardo de transferencia": "warn", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}.get(vr, "off")
         vr_det = " · ".join(x for x in ("alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
-        celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "") + (f"<small>corte de las {hb(cpeor['a'])}</small>" if cpeor is not ultimo else "")
+        celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
         celdas_prev = "".join(
             (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small></td>' if i < len(previos) else "<td></td>")
             for i in range(n_prev))
@@ -296,7 +295,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     sis_head = ('<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Tiempo que<br>vio la casa</th>'
                 + '<th>Último corte<br>inicio → fin · duración<br>SOC inicio → fin · respaldo</th>'
                 + "".join(f'<th class="n">Anterior {i + 1}<br>% respaldo</th>' for i in range(n_prev))
-                + '<th>Ahora</th><th>Veredicto de respaldo<br>(peor corte)</th>')
+                + '<th>Ahora</th><th>Veredicto de respaldo<br>(último corte)</th>')
     sec_sis = tabla(sis_head, rows, 800 + 70 * n_prev) if rows else ""
     # casas que solo tienen baterías (sin FV): se reportan aparte
     sec_bat = ""
@@ -436,7 +435,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
     {sec_bat}
     {sec_det}
-    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo, y la hora y la duración salen al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo, y la hora y la duración salen al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
 </section>
 

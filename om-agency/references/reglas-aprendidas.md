@@ -343,3 +343,13 @@ Reportes Operativos Periódicos.
 - Se mantienen "Cortes", "Tiempo sin red", "Tiempo que vio la casa" (suma de todos los cortes), "Ahora" y el veredicto, que sigue siendo el del peor corte (se indica "corte de las HH:MM" cuando no es el último). Criterio por confirmar con el usuario: si el veredicto debe ser el del último corte.
 
 **Dónde está el código:** bloque "una columna por corte" en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — El veredicto de la tabla "Por sistema" es el del último corte
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario (confirmada):** en la tabla "Por sistema", el veredicto de respaldo y todo su detalle (alimenta, sin tensión, SOC) son **solo los del último corte registrado** de cada casa, el mismo que se muestra completo en la columna "Último corte". No se muestran leyendas de otros cortes dentro del veredicto: mostrar "corte de las 09:29" junto a un último corte de las 12:46 confunde. Los cortes anteriores llevan únicamente su % de respaldo.
+
+**Reemplaza** el criterio de la entrada anterior ("el veredicto sigue siendo el del peor corte", que quedaba por confirmar). Consecuencia: una falla en un corte anterior (p. ej. caída durante el respaldo de la Casa 99 a las 09:29) ya no aparece en la etiqueta de la tabla; sigue visible en el desplegable "Detalle por corte" y en el % de respaldo de ese corte.
+
+**Dónde está el código:** bloque "una columna por corte" en `reporte-diario/reporte_html.py`.
