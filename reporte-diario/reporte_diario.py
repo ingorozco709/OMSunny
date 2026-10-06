@@ -22,6 +22,13 @@ GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al ev
 PV_MIN_KWH = 5.0                      # una casa cuyo inversor nunca pasa de este valor diario (energyPD) no tiene FV instalada: solo baterías de respaldo
 PV_MIN_DIAS = 5                       # días con dato necesarios para decidir que una casa no tiene FV
 EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
+YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
+CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
+
+def patron_yield(ciudad):
+    """Yield patrón (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
+    c = (ciudad or "").strip().upper()
+    return YIELD_PATRON["CALI"] if c == "CALI" else (YIELD_PATRON["COSTA"] if c in CIUDADES_COSTA else None)
 
 # ------------------------------------------------------------------ Metrum
 BASE = os.environ.get("METRUM_API_URL", "").rstrip("/")

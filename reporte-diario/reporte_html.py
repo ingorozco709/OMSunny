@@ -59,44 +59,20 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # ------------------------------------------------ generación FV
     cap_ok = lambda R: R["sys"]["cap"] and R["sys"]["cap"] > 0
-    sy = {}      # (ciudad, d0) -> lista de kWh/kW
-    for R in RS:
-        s = R["sys"]
-        if not cap_ok(R):
-            continue
-        for d0, v in list(R["pv"].items()) + list(R["pv_hist"].items()):
-            if v and v > 0:
-                sy.setdefault((s["ciudad"], d0), []).append(v / s["cap"])
-    med = {k: st.median(v) for k, v in sy.items() if len(v) >= 3}
     for R in RS:
         s = R["sys"]; vs = [v for v in R["pv"].values() if v is not None]
         R["pv_tot"] = sum(vs) if vs else None
-        idx = []
-        for d0, v in R["pv"].items():
-            m = med.get((s["ciudad"], d0))
-            if v is not None and cap_ok(R) and m:
-                idx.append((v / s["cap"]) / m)
-        R["idx"] = st.mean(idx) if idx else None
-        hist = []
-        for d0, v in R["pv_hist"].items():
-            m = med.get((s["ciudad"], d0))
-            if v and cap_ok(R) and m:
-                hist.append((v / s["cap"]) / m)
-        R["idx_base"] = st.median(hist) if len(hist) >= 3 else None
-        R["sy"] = (R["pv_tot"] / ndias / s["cap"]) if (R["pv_tot"] is not None and cap_ok(R)) else None
-        dd = [v for v in list(R["pv"].values()) + list(R["pv_hist"].values()) if v is not None]
-        R["gen_dia_med"] = st.mean(dd) if dd else None
         R["sy_anual"] = (R["pv_tot"] / ndias / s["cap"] * 365) if (R["pv_tot"] is not None and cap_ok(R)) else None
-        R["ratio"] = (R["idx"] / R["idx_base"]) if (R["idx"] is not None and R["idx_base"]) else None
+        # frente al yield patrón de su región (Cali / costa), definido por el usuario: yield anual proyectado del sistema ÷ patrón
+        R["patron"] = patron_yield(s["ciudad"])
+        R["ratio"] = (R["sy_anual"] / R["patron"]) if (R["sy_anual"] is not None and R["patron"]) else None
         flag = None
         if R["pv_tot"] is None:
             flag = ("off", "sin cierre diario del medidor")
         elif R["pv_tot"] == 0:
             flag = ("crit", "sin producción")
         elif R["ratio"] is not None and R["ratio"] < 0.75:
-            flag = ("warn", "baja vs su patrón" + (", con corte" if sum(c["dur"] or 0 for c in R["cortes"]) >= 1800 else ""))
-        elif R["idx"] is not None and R["idx"] < 0.5 and (R["idx_base"] or 1) < 0.5:
-            flag = ("warn", "baja de forma sostenida")
+            flag = ("warn", "baja vs patrón" + (", con corte" if sum(c["dur"] or 0 for c in R["cortes"]) >= 1800 else ""))
         R["flag"] = flag
     pv_total = sum(R["pv_tot"] for R in RS if R["pv_tot"] is not None)
     # patrón del portafolio Sunny: media de la generación total de los días previos con la misma lista de sistemas
@@ -336,13 +312,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # rendimiento
     rows = []
     for c in ciudades:
-        rows.append(f'<tr class="ciudad"><td colspan="{5 + ndias}">{esc(c.title())}</td></tr>')
+        _pt = patron_yield(c)
+        rows.append(f'<tr class="ciudad"><td colspan="{5 + ndias}">{esc(c.title())}{f" · yield patrón {_pt} kWh/kWp·año" if _pt else ""}</td></tr>')
         for R in [R for R in RS if R["sys"]["ciudad"] == c]:
             s = R["sys"]
             cols = "".join(f'<td class="n">{_kwh(R["pv"].get(d0))}</td>' for d0, _ in dias)
             fl = _pill({"crit": "crit", "warn": "warn", "off": "off"}[R["flag"][0]], R["flag"][1]) if R["flag"] else ""
             rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 2) if s["cap"] else "—"} kWp</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}</td></tr>')
-    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente a su<br>patrón</th><th>Alerta</th>'
+    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente al<br>yield patrón</th><th>Alerta</th>'
     sec_pv = tabla(pv_head, rows, 760 + 60 * ndias)
 
     # exportación
@@ -444,7 +421,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Rendimiento de los sistemas</h2>
   <div class="card">
     {sec_pv}
-    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente a su patrón» compara el índice del sistema (su kWh por kW sobre la mediana de su ciudad ese día) con su mediana de los 9 días anteriores; así se descuenta el efecto del clima.</p>
+    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón.</p>
   </div>
 </section>
 
