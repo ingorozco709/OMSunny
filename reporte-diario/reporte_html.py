@@ -269,10 +269,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         cobs = [c["cob"] for c in cc if c["cob"] is not None]
         estado = _pill("crit", "sin red") if R["en_curso"] else ""
         cls = "r0" if R["en_curso"] else ("r1" if perc >= 300 else "")
-        _g = {"Caída durante el respaldo": 3, "Sin respaldo": 2, "Respaldo total con transferencia": 1, "Respaldo total": 0}
+        _g = {"Caída durante el respaldo": 4, "Sin respaldo": 3, "Transferencia lenta": 2, "Respaldo total con transferencia": 1, "Respaldo total": 0}
         cpeor = max(cc, key=lambda c: (_g.get(c.get("veredicto"), 0), c["dur"] or 0))
         vr = cpeor.get("veredicto") or ""
-        niv = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}.get(vr, "off")
+        niv = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Transferencia lenta": "warn", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}.get(vr, "off")
         vr_det = " · ".join(x for x in ("alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
         celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
         rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(mayor["dur"] or 0)}<small>{hbd(mayor["a"])}</small></td><td class="n">{fmt(perc) if perc else "—"}</td><td class="n">{(dec(min(cobs), 1) + " %") if cobs else "—"}</td><td class="n">{soc_uno(mayor.get("soc0"))}</td><td class="n">{soc_uno(mayor.get("soc1"))}</td><td>{estado}</td><td>{celda_resp}</td></tr>')

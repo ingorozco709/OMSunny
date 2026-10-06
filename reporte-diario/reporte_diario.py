@@ -266,7 +266,7 @@ TRANSFER_MAX = 120   # s: un hueco "al caer" de hasta 2 min es la transferencia 
 SOC_AGOTADA = 12     # % de SOC con el que se considera batería agotada
 
 def veredicto_respaldo(c, bpw, soc, W1):
-    """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | caída durante el respaldo | sin respaldo."""
+    """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | transferencia lenta | caída durante el respaldo | sin respaldo."""
     a = c["a"]; b = c["b"] if c["b"] is not None else W1
     pw = [v for t, v in bpw if a <= t <= b]
     if pw:
@@ -276,6 +276,7 @@ def veredicto_respaldo(c, bpw, soc, W1):
         fuente = None
     hu = c.get("hu") or []
     durante = [h for h in hu if h["tipo"] == "durante" and h["d"] >= TRANSFER_MAX]
+    lentas = [h for h in hu if h["tipo"] == "al caer" and h["d"] > TRANSFER_MAX]   # la casa tardó más de 2 min en recuperar tensión al pasar a isla
     causa = None
     if not hu:
         v = "Respaldo total"
@@ -287,6 +288,9 @@ def veredicto_respaldo(c, bpw, soc, W1):
         causa = "batería agotada" if sc is not None and sc <= SOC_AGOTADA else ("SOC %d %%: revisar inversor" % round(sc) if sc is not None else "revisar inversor")
     elif c.get("cob") is not None and c["cob"] < 5:
         v = "Sin respaldo"
+    elif lentas:
+        v = "Transferencia lenta"
+        causa = "hueco al caer de " + fmt(max(h["d"] for h in lentas))
     else:
         v = "Respaldo total con transferencia"
     return v, fuente, causa

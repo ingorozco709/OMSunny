@@ -294,3 +294,15 @@ Reportes Operativos Periódicos.
 - `potencia_instalada.json` sale de `Casas_V2.xlsx` (2026-10-06): Casas 412p y 425p pasan de 2,975 a 5,36 kWp. El usuario confirmó que ambas tienen 9 paneles (el archivo decía 5); 9 × 0,595 = 5,355 kWp, que el archivo redondea a 5,36. La fila "Piloto Promigas" del archivo no se incluye (pilotos excluidos).
 
 **Dónde está el código:** `reporte-diario/` (`reporte_diario.py`, `reporte_html.py`).
+
+## 2026-10-06 — Veredicto "Transferencia lenta" (hueco al caer de más de 2 min)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Decisión del usuario ("sí, por favor", sobre la propuesta):** un hueco de tensión en el medidor solar "al caer" la red que dura **más de 2 min** ya no se etiqueta como "Respaldo total con transferencia" (esa etiqueta queda para transferencias de hasta 2 min). Se etiqueta **"Transferencia lenta"**: la casa sí quedó respaldada después, pero tardó en recuperar tensión al pasar a isla. La celda del veredicto muestra la duración del hueco.
+
+**Caso que lo originó (6-oct, Cali, corte desde las 09:29):** Casa 57 (Livoltek HP3-10KL2) con medidor solar sin tensión de 09:29:52 a 09:38:33 (8 min 41 s; muestra de las 09:30 con 0,0 V y 0 W; batería en 99 %), confirmado con los eventos `po`/`pr` y con las muestras del propio medidor. En el mismo corte, los Livoltek HP3-10KL2 tardaron entre 2 min 35 s y 8 min 41 s; los Deye, cerca de 1 min.
+
+**Prioridad entre veredictos de un corte:** caída durante el respaldo, sin respaldo, transferencia lenta, transferencia normal, respaldo total. Un hueco "durante" de 2 min o más sigue siendo caída, aunque también haya un hueco lento al caer.
+
+**Dónde está el código:** `veredicto_respaldo` en `reporte-diario/reporte_diario.py`.
