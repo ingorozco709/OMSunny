@@ -204,3 +204,14 @@ reporte de interrupciones de Cali (titular con la conclusión, KPIs, "Qué pasó
 casa con el tiempo sin tensión en cada evento, línea de tiempo, batería durante el corte,
 pendientes y límites del análisis), pero solo con datos de hoy: sin comparar con ayer ni
 citar fechas de días anteriores.
+
+## 2026-10-05 — Permisos: solo lectura en Metrum
+
+**Aplica a:** todos los especialistas.
+
+**Regla:** el agente solo tiene permiso para consultar datos y generar los reportes que se
+le pidan. No da de baja, edita ni escribe nada en Metrum (dispositivos, atributos o
+comandos) y no envía comandos a los equipos. Cuando un reporte detecte algo que pida un
+cambio en Metrum (por ejemplo, inversores retirados que siguen registrados), lo deja como
+tarea del equipo, redactada para que la haga una persona, y no ofrece ejecutarlo ni
+pregunta si debe hacerlo.
