@@ -419,3 +419,11 @@ Reportes Operativos Periódicos.
 **Caso que la originó (5-oct, Turbaco):** Casa 55p (73 % del patrón, producción de 4,6 kW a las 09:45 y batería llena a las 13:15, desde cuando la producción igualó al consumo) y Casa 60p (batería llena a las 14:45). La Casa 287 no entra: su batería no llegó a llenarse; su explicación es "bajo consumo".
 
 **Dónde está el código:** `LLENO_TARDE_H` y `LLENO_ANTES_H` en `reporte-diario/reporte_diario.py`; la alerta en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Sin barras en las tablas del reporte
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** eliminar también las barras de la tabla "Exportación de energía activa" (la última columna, junto a "Cobertura solar", dibujaba la energía exportada de cada casa frente a la mayor exportadora y se leía como si fuera la cobertura). Con esto el reporte ya no lleva barras en ninguna tabla (las de "Rendimiento" se quitaron antes). Las tablas solo muestran cifras y etiquetas.
+
+**Dónde está el código:** tabla de exportación en `reporte-diario/reporte_html.py`.

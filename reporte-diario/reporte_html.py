@@ -345,15 +345,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # exportación
     rows = []
-    ex_max = max([R["exp"]["total"] for R in RS if R["exp"].get("total")] or [1])
     for c in ciudades:
-        rows.append(f'<tr class="ciudad"><td colspan="{8 + ndias}">{esc(c.title())}</td></tr>')
+        rows.append(f'<tr class="ciudad"><td colspan="{7 + ndias}">{esc(c.title())}</td></tr>')
         for R in sorted([R for R in RS if R["sys"]["ciudad"] == c], key=lambda R: -(R["exp"].get("total") or 0)):
             s = R["sys"]; t = R["exp"].get("total")
             cols = "".join(f'<td class="n">{_kwh(R["exp"].get(d0), 2)}</td>' for d0, _ in dias)
             share = (100 * t / R["pv_tot"]) if (t is not None and R["pv_tot"]) else None
-            rows.append(f'<tr><td><b>{esc(s["casa"])}</b></td>{cols}<td class="n"><b>{_kwh(t, 2)}</b></td><td class="n">{_kwh(R["imp"].get("total"), 1)}</td><td class="n">{_kwh(R["cons"].get("total"), 1)}</td><td class="n">{(dec(share, 1) + " %") if share is not None else "—"}</td><td class="n">{_kwh(R["cons_cli"], 1)}</td><td class="n"><b>{(dec(R["cob_sol"], 0) + " %") if R["cob_sol"] is not None else "—"}</b></td><td><span class="bar" style="width:{max(2, 120 * (t or 0) / ex_max):.0f}px"></span></td></tr>')
-    ex_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th><th class="n">Consumo lado<br>respaldado kWh</th><th class="n">Exportada /<br>generada</th><th class="n">Consumo del cliente<br>kWh</th><th class="n">Cobertura<br>solar</th><th></th>'
+            rows.append(f'<tr><td><b>{esc(s["casa"])}</b></td>{cols}<td class="n"><b>{_kwh(t, 2)}</b></td><td class="n">{_kwh(R["imp"].get("total"), 1)}</td><td class="n">{_kwh(R["cons"].get("total"), 1)}</td><td class="n">{(dec(share, 1) + " %") if share is not None else "—"}</td><td class="n">{_kwh(R["cons_cli"], 1)}</td><td class="n"><b>{(dec(R["cob_sol"], 0) + " %") if R["cob_sol"] is not None else "—"}</b></td></tr>')
+    ex_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th><th class="n">Consumo lado<br>respaldado kWh</th><th class="n">Exportada /<br>generada</th><th class="n">Consumo del cliente<br>kWh</th><th class="n">Cobertura<br>solar</th>'
     sec_ex = tabla(ex_head, rows, 760 + 60 * ndias)
 
     # comunicación
