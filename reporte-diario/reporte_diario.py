@@ -264,9 +264,10 @@ def elegir_activo(lst, datos, claves):
 
 TRANSFER_MAX = 120   # s: un hueco "al caer" de hasta 2 min es la transferencia a isla; un hueco "durante" de 2 min o más es una caída del respaldo
 SOC_AGOTADA = 12     # % de SOC con el que se considera batería agotada
+RETARDO_MIN = 60     # s: si la casa ve una interrupción continua de más de 1 min al caer la red y la batería estaba cargada (SOC al inicio del corte > RESERVA), es un retardo de transferencia
 
 def veredicto_respaldo(c, bpw, soc, W1):
-    """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | transferencia lenta | caída durante el respaldo | sin respaldo."""
+    """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | retardo de transferencia | caída durante el respaldo | sin respaldo."""
     a = c["a"]; b = c["b"] if c["b"] is not None else W1
     pw = [v for t, v in bpw if a <= t <= b]
     if pw:
@@ -276,7 +277,9 @@ def veredicto_respaldo(c, bpw, soc, W1):
         fuente = None
     hu = c.get("hu") or []
     durante = [h for h in hu if h["tipo"] == "durante" and h["d"] >= TRANSFER_MAX]
-    lentas = [h for h in hu if h["tipo"] == "al caer" and h["d"] > TRANSFER_MAX]   # la casa tardó más de 2 min en recuperar tensión al pasar a isla
+    caer = max((h["d"] for h in hu if h["tipo"] == "al caer"), default=0)   # s de la interrupción continua más larga al pasar a isla (no se suman microhuecos separados)
+    soc0 = c.get("soc0")
+    cargada = soc0 is not None and soc0 > RESERVA
     causa = None
     if not hu:
         v = "Respaldo total"
@@ -288,9 +291,9 @@ def veredicto_respaldo(c, bpw, soc, W1):
         causa = "batería agotada" if sc is not None and sc <= SOC_AGOTADA else ("SOC %d %%: revisar inversor" % round(sc) if sc is not None else "revisar inversor")
     elif c.get("cob") is not None and c["cob"] < 5:
         v = "Sin respaldo"
-    elif lentas:
-        v = "Transferencia lenta"
-        causa = "hueco al caer de " + fmt(max(h["d"] for h in lentas))
+    elif caer > RETARDO_MIN and cargada:
+        v = "Retardo de transferencia"
+        causa = f"sin tensión {fmt(caer)} al caer · SOC {soc0:.0f} %"
     else:
         v = "Respaldo total con transferencia"
     return v, fuente, causa

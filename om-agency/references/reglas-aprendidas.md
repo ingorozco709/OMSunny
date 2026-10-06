@@ -306,3 +306,17 @@ Reportes Operativos Periódicos.
 **Prioridad entre veredictos de un corte:** caída durante el respaldo, sin respaldo, transferencia lenta, transferencia normal, respaldo total. Un hueco "durante" de 2 min o más sigue siendo caída, aunque también haya un hueco lento al caer.
 
 **Dónde está el código:** `veredicto_respaldo` en `reporte-diario/reporte_diario.py`.
+
+## 2026-10-06 — Veredicto "Retardo de transferencia" (reemplaza a "Transferencia lenta")
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Regla (instrucción del usuario):** cuando el cliente ve la interrupción más de 1 min con la batería cargada, el corte se marca como **"Retardo de transferencia"**. Reemplaza al veredicto "Transferencia lenta" de la entrada anterior (umbral de 2 min), que ya no se usa.
+
+**Cómo se aplicó (criterios del generador, confirmables con el usuario):**
+- "Ve la interrupción" = un solo hueco continuo de tensión en el medidor solar al caer la red, de más de 60 s. No se suman microhuecos separados: los Deye mostraron dos huecos de ~32 s con ~9 s de tensión en medio (Casas 10, 74, 111) y no se marcan; la Casa 63, con un solo hueco de 61 s, sí.
+- "Batería cargada" = SOC al inicio del corte mayor a 22 % (el mismo umbral de reserva del reporte). Con SOC de 22 % o menos o sin dato de SOC no se marca como retardo.
+- Un hueco "durante" de 2 min o más sigue siendo "Caída durante el respaldo" (batería agotada si SOC ≤ 12 %, si no revisar inversor), con prioridad sobre el retardo; "Sin respaldo" también tiene prioridad.
+- La celda del veredicto muestra la duración del hueco y el SOC, p. ej. Casa 57: 8 min 41 s sin tensión al caer, SOC 97 %.
+
+**Dónde está el código:** `veredicto_respaldo` en `reporte-diario/reporte_diario.py` (`RETARDO_MIN`).
