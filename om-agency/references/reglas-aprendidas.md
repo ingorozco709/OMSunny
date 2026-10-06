@@ -361,3 +361,17 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** en las columnas "Anterior 1…4" de la tabla "Por sistema", además del % de respaldo se muestra la **hora a la que fue cada corte** (hora de inicio, con fecha solo si no es del día del reporte). Ajusta la entrada anterior ("solo el % de respaldo, nada más"): la hora ahora es visible; la duración sigue saliendo solo al pasar el cursor.
 
 **Dónde está el código:** `_hora` y `celdas_prev` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Tabla "Rendimiento": sin barras; revisión del yield alto (la potencia no se cambió)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** quitar las barras de la tabla "Rendimiento de los sistemas" (comparaban la generación de cada casa con la del mayor generador y se leían como si fueran el "Frente a su patrón"). La última columna queda como "Alerta" y solo lleva las etiquetas (baja vs su patrón, sin cierre diario, etc.). Las barras de la tabla de exportación no se tocaron.
+
+**Criterio reafirmado por el usuario:** el yield se calcula con la generación real del último día evaluado (el último día completo con cierres diarios), no con promedios de varios días. Los 10 días solo se usaron como diagnóstico para revisar la potencia, no para calcular el yield.
+
+**Revisión del yield alto del 5-oct (sin cambiar la potencia):**
+- La potencia de `potencia_instalada.json` coincide con paneles × 0,595 kWp de `Casas_V2.xlsx` en todas las casas, salvo Casa 9G y Casa 121 CR (12,5 kWp con 22 paneles; 22 × 0,595 = 13,09: por confirmar con el usuario si usan otro módulo) y diferencias menores (Casa 48PC: 11,35 frente a 11,305).
+- En las casas con yield más alto del Livoltek, el contador diario del propio inversor (`energyPD`) coincide con la generación por balance (Casa 23: 28,6 frente a 29,7 kWh; Casa 76: 33,8 frente a 30,3 kWh). La generación es real; si el yield es alto, la duda es la potencia registrada. En los Deye `energyPD` no sirve (regla del 2026-10-06).
+- Candidatos a revisar la potencia (yield del día 1,4 a 1,7 veces la mediana de su conjunto, Reservas de Pance): Casa 23 (6,54 kWp), Casa 76 (7,14 kWp), Casa 30, Casa 18 y Casa 63. Sin dato independiente de la potencia FV instalada no se puede corregir: la telemetría del inversor no trae potencia FV instantánea. El estado `throttled` no sirve para detectar recorte (los Livoltek lo marcan casi siempre y los Deye nunca).
+- Pendiente: que el usuario confirme la potencia (paneles) de esas casas.

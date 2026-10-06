@@ -335,16 +335,14 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # rendimiento
     rows = []
-    mx_pv = max([R["pv_tot"] for R in RS if R["pv_tot"]] or [1])
     for c in ciudades:
         rows.append(f'<tr class="ciudad"><td colspan="{5 + ndias}">{esc(c.title())}</td></tr>')
         for R in [R for R in RS if R["sys"]["ciudad"] == c]:
             s = R["sys"]
             cols = "".join(f'<td class="n">{_kwh(R["pv"].get(d0))}</td>' for d0, _ in dias)
             fl = _pill({"crit": "crit", "warn": "warn", "off": "off"}[R["flag"][0]], R["flag"][1]) if R["flag"] else ""
-            bar = f'<span class="bar {"crit" if R["flag"] and R["flag"][0] == "crit" else ("warn" if R["flag"] and R["flag"][0] == "warn" else "")}" style="width:{max(2, 120 * (R["pv_tot"] or 0) / mx_pv):.0f}px"></span>'
-            rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 2) if s["cap"] else "—"} kWp</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}{bar if not fl else ""}</td></tr>')
-    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente a su<br>patrón</th><th></th>'
+            rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 2) if s["cap"] else "—"} kWp</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}</td></tr>')
+    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente a su<br>patrón</th><th>Alerta</th>'
     sec_pv = tabla(pv_head, rows, 760 + 60 * ndias)
 
     # exportación
