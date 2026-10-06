@@ -159,3 +159,39 @@ tensión normal, por lo tanto EMCALI está bien" hecha DESPUÉS de las 13:45 Bog
 2026-09-29 para estas 22 casas está basada en un dato viejo, no en vivo — no se puede
 confirmar el estado real de EMCALI en esos puntos hasta que la plataforma vuelva a
 ingerir `voltageA` del medidor.
+
+## 2026-10-05 — Alcance de los reportes de estado: sin pilotos, solo datos de hoy, casas por nombre
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador
+de Reportes Operativos Periódicos y Líder de Diagnóstico de Fallas (cuando entregue un
+reporte).
+
+**1. Excluir siempre los sistemas piloto de todo reporte.** Un sistema es piloto si el
+nombre de su gateway o su atributo `spcus` (nombre de la casa/cliente) contiene "piloto"
+(sin distinguir mayúsculas). Se excluyen el gateway y todos los inversores y medidores
+que lo tienen en su atributo `gateway`: no se consultan, no se listan y no cuentan en
+ningún total (sitios, dispositivos, disponibilidad, generación). Hoy son dos sitios de la
+zona OFICINA PROMIGAS (Barranquilla), 8 dispositivos en total: el gateway `Piloto` y el
+gateway `IN42420373` (`spcus` = "Piloto Promigas"), con los inversores
+`HV2150024762` y `HP315K2HWC290014` y los medidores `2220231041`, `2223005621`,
+`2223005627` y `2223005649`. Esta exclusión es una instrucción del usuario, distinta de
+la lista de dispositivos fantasma: no se reincluye aunque un piloto muestre telemetría
+nueva. Si no está claro si un sistema es piloto, preguntar antes de incluirlo.
+
+**2. Reporte de estado de operación: solo datos de hoy.** El rango es desde las 00:00
+hora Bogotá del día del reporte hasta la hora de corte. Estado actual con consulta de
+último valor (sin rango); interrupciones, eventos, voltajes, corrientes y disponibilidad
+con ventanas de hoy. No consultar histórico de 7 o 30 días para este reporte. Un equipo
+sin datos hoy se reporta como "sin datos hoy" con la hora de su último valor (consulta de
+último valor, no un barrido de histórico). Esta regla acota la verificación del
+2026-09-25 ("pedir el histórico de varios días"): en el reporte de estado, "sostenido" se
+evalúa dentro del día. Si el usuario pide tendencias o un periodo, se consulta ese rango.
+
+**3. Identificar las casas por su nombre.** El nombre de la casa está en el atributo
+`spcus` del gateway (ej. "Casa 24"); los inversores y medidores lo heredan por su
+atributo `gateway`. En cada reporte, ese nombre va como identificador principal junto con
+el conjunto o zona, y el serial del equipo solo como dato secundario. Mapa de Barranquilla
+al 2026-10-05: gateway 1023 = Casa 24, 1026 = Casa 155 y 1030 = Casa 287 (Terra by Kaia);
+1039 = Casa 9G (Gerona Club House); IN42420393 = Casa 121 CR (Castellana Real). Leer
+`spcus` en vivo en cada reporte, porque el mapa puede cambiar. El operador de red
+(`spdno`) de esta zona es Air-e.
