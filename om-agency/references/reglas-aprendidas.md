@@ -439,3 +439,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** (1) exportación: una columna por día con su rango ("lun 5 oct 17:40–24:00" y "mar 6 oct 00:00–17:40") que suman el total; (2) exportada, importada y consumo del lado respaldado llevan el periodo de la ventana ("5 oct 17:40 → 6 oct 17:40"); (3) consumo del cliente, generación, cobertura y "Exportada / generada" indican "lun 5 oct 00:00–24:00" (días completos, con cierre diario); (4) rendimiento: columnas por día con "00:00–24:00"; (5) la tarjeta de exportación del resumen indica el periodo. La nota bajo la tabla lo explica.
 
 **Dónde está el código:** `_rango`, `vent_h`, `per_dias` y `segs_ex` en `reporte-diario/reporte_html.py`; el segmento de hoy en `analizar` de `reporte-diario/reporte_diario.py`.
+
+## 2026-10-06 — La reserva de la batería se toma como el 20 %
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** la reserva de la batería se toma como **20 %** (antes 22 %) para todos los sistemas.
+
+**Qué cambia (constante `RESERVA` en `reporte-diario/reporte_diario.py`):** el punto "Baterías" (sistemas que llegaron a la reserva durante un corte), el punto "Baterías en reserva" (último SOC de 20 % o menos) y el texto de "Límites del análisis". Como la batería "cargada" del veredicto "Retardo de transferencia" se define como SOC al inicio del corte mayor a la reserva, ese umbral también pasa a 20 %. Las entradas anteriores de este archivo que citan el 22 % son históricas y quedan reemplazadas por esta.
+
+**Efecto con los datos del 6-oct (17:41):** "Baterías en reserva" incluye la Casa 99 (20 %) además de 102p (15 %), 121 CR (19 %), 415p (19 %) y 447p (12 %); los veredictos de respaldo no cambiaron.

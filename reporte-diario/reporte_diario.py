@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BOG = dt.timedelta(hours=5)           # Bogotá = UTC-5, sin horario de verano
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-RESERVA = 22.0                        # SOC a partir del cual se considera la batería en reserva (piso típico 20 %)
+RESERVA = 20.0                        # SOC a partir del cual se considera la batería en reserva (instrucción del usuario: 20 %); también define "batería cargada" (SOC > RESERVA)
 GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al evento de red más cercano dentro de este radio
 PV_MIN_KWH = 5.0                      # una casa cuyo inversor nunca pasa de este valor diario (energyPD) no tiene FV instalada: solo baterías de respaldo
 PV_MIN_DIAS = 5                       # días con dato necesarios para decidir que una casa no tiene FV
