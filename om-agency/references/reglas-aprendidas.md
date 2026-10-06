@@ -320,3 +320,13 @@ Reportes Operativos Periódicos.
 - La celda del veredicto muestra la duración del hueco y el SOC, p. ej. Casa 57: 8 min 41 s sin tensión al caer, SOC 97 %.
 
 **Dónde está el código:** `veredicto_respaldo` en `reporte-diario/reporte_diario.py` (`RETARDO_MIN`).
+
+## 2026-10-06 — Corrección del "Retardo de transferencia" y de la asignación de huecos a cortes
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Corrige la entrada anterior ("Retardo de transferencia"), en el criterio de "ve la interrupción":** contar solo el hueco más largo dejaba a la Casa 63 (un hueco de 61 s, 1 min 15 s vistos) con retardo y a la Casa 74 (dos huecos de ~31 s, 1 min 34 s vistos) sin marcar. Los Deye cortan dos veces seguidas al caer la red, con ~9 s de tensión en medio; para el cliente es una sola interrupción de ~1 min. Ahora la interrupción al caer es el primer hueco "al caer" más los que le siguen con menos de 60 s de tensión en medio; los huecos separados (a mitad del corte o al volver la red) no se suman. El resto de la regla no cambia (más de 60 s, batería cargada = SOC al inicio > 22 %, la caída durante el respaldo y "sin respaldo" tienen prioridad). La celda muestra, p. ej., "sin tensión 1 min 03 s al caer en 2 huecos · SOC 49 %".
+
+**Corrección de asignación (cumple la regla del 2026-10-05 de que cada tramo del medidor solar va a una sola interrupción):** un hueco del medidor solar cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes. Antes, un hueco que empezaba justo antes de un segundo corte (relojes de los medidores desfasados ~23 s) se sumaba también al corte anterior. Caso: Casas 15, 23, 42 y 77 el 6-oct, cortes de red de 12:40 (41 s) y 12:46 (1 h 41 min): el hueco de 5 min 35 s es del segundo corte, pero el primero salía como "Sin respaldo" con respaldo de 0 %.
+
+**Dónde está el código:** `interrupcion_al_caer` y `veredicto_respaldo` (y el reparto de huecos en `analizar`) en `reporte-diario/reporte_diario.py`.

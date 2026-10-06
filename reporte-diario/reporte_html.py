@@ -445,7 +445,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Límites del análisis</h2>
   <div class="limits">
     <p>Los medidores de red sin tensión envían sus eventos guardados solo cuando vuelve la red. Un corte en curso se detecta con el inversor (entrada de red por debajo de 5 V) y su hora de inicio es aproximada (≈) hasta que vuelva la red.</p>
-    <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco se asocia al corte de red más cercano en el tiempo (hasta 75 s) y los posteriores hasta 10 min después del regreso de la red.</p>
+    <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes.</p>
     <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>

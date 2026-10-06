@@ -264,7 +264,22 @@ def elegir_activo(lst, datos, claves):
 
 TRANSFER_MAX = 120   # s: un hueco "al caer" de hasta 2 min es la transferencia a isla; un hueco "durante" de 2 min o más es una caída del respaldo
 SOC_AGOTADA = 12     # % de SOC con el que se considera batería agotada
-RETARDO_MIN = 60     # s: si la casa ve una interrupción continua de más de 1 min al caer la red y la batería estaba cargada (SOC al inicio del corte > RESERVA), es un retardo de transferencia
+RETARDO_MIN = 60     # s: si la casa ve más de 1 min sin tensión al caer la red y la batería estaba cargada (SOC al inicio del corte > RESERVA), es un retardo de transferencia
+UNION_S = 60         # s: huecos del arranque con menos de este tiempo de tensión entre ellos cuentan como una sola interrupción (algunos Deye cortan dos veces con ~9 s de por medio)
+
+def interrupcion_al_caer(hu):
+    """(s sin tensión, n huecos) de la interrupción que ve la casa al caer la red: el primer hueco "al caer" más los que le siguen pegados (< UNION_S de tensión en medio).
+    Los huecos separados (a mitad del corte o al volver la red) no se suman."""
+    gs = sorted(hu, key=lambda h: h["a"])
+    ini = next((h for h in gs if h["tipo"] == "al caer"), None)
+    if ini is None:
+        return 0, 0
+    fin = ini["a"] + ini["d"] * 1000
+    seg, n = ini["d"], 1
+    for h in gs:
+        if h["a"] > ini["a"] and h["tipo"] in ("al caer", "durante") and h["a"] - fin <= UNION_S * 1000:
+            seg += h["d"]; n += 1; fin = max(fin, h["a"] + h["d"] * 1000)
+    return seg, n
 
 def veredicto_respaldo(c, bpw, soc, W1):
     """(veredicto, fuente, causa) de un corte. Veredicto: total | total con transferencia | retardo de transferencia | caída durante el respaldo | sin respaldo."""
@@ -277,7 +292,7 @@ def veredicto_respaldo(c, bpw, soc, W1):
         fuente = None
     hu = c.get("hu") or []
     durante = [h for h in hu if h["tipo"] == "durante" and h["d"] >= TRANSFER_MAX]
-    caer = max((h["d"] for h in hu if h["tipo"] == "al caer"), default=0)   # s de la interrupción continua más larga al pasar a isla (no se suman microhuecos separados)
+    caer, n_caer = interrupcion_al_caer(hu)
     soc0 = c.get("soc0")
     cargada = soc0 is not None and soc0 > RESERVA
     causa = None
@@ -293,7 +308,7 @@ def veredicto_respaldo(c, bpw, soc, W1):
         v = "Sin respaldo"
     elif caer > RETARDO_MIN and cargada:
         v = "Retardo de transferencia"
-        causa = f"sin tensión {fmt(caer)} al caer · SOC {soc0:.0f} %"
+        causa = f"sin tensión {fmt(caer)} al caer" + (f" en {n_caer} huecos" if n_caer > 1 else "") + f" · SOC {soc0:.0f} %"
     else:
         v = "Respaldo total con transferencia"
     return v, fuente, causa
@@ -381,6 +396,23 @@ def analizar(s, D, W0, W1, dias):
         huecos.append(dict(a=a, b=b, d=(fin_h - a) / 1000))
     bpw = sorted((t, v) for r in s["inv"] for t, v in S(D.get(r["id"], {}), "BattPower") if isinstance(v, (int, float)))
     # --- respaldo por corte
+    # cada hueco del medidor solar cuenta en un solo corte (regla del equipo): el que empieza cerca de su inicio (al caer), si no el que lo contiene,
+    # si no el último que terminó hasta 10 min antes. Sin esto, un hueco que empieza justo antes de un segundo corte también se sumaba al corte anterior.
+    dueno = {}
+    for h in huecos:
+        mejor = None
+        for c in cortes:
+            if c["a"] is None:
+                continue
+            fin_c = c["b"] if c["b"] is not None else W1
+            if abs(h["a"] - c["a"]) <= GAP_RADIO: rango = (0, abs(h["a"] - c["a"]))
+            elif c["a"] <= h["a"] <= fin_c: rango = (1, 0)
+            elif fin_c < h["a"] <= fin_c + 10 * 60000: rango = (2, h["a"] - fin_c)
+            else: continue
+            if mejor is None or rango < mejor[0]:
+                mejor = (rango, c)
+        if mejor:
+            dueno[id(h)] = mejor[1]
     usados = set()
     for c in cortes:
         if c["a"] is None:
@@ -388,8 +420,7 @@ def analizar(s, D, W0, W1, dias):
         fin_c = c["b"] if c["b"] is not None else W1
         c["a_v"] = max(c["a"], W0); c["b_v"] = min(fin_c, W1)
         c["dur"] = (c["b_v"] - c["a_v"]) / 1000
-        lim_fin = (c["b"] if c["b"] is not None else W1) + 10 * 60000
-        hu = [h for i, h in enumerate(huecos) if c["a"] - GAP_RADIO <= h["a"] <= lim_fin]
+        hu = [h for h in huecos if dueno.get(id(h)) is c]
         for h in hu:
             usados.add(id(h))
             if abs(h["a"] - c["a"]) <= GAP_RADIO: h["tipo"] = "al caer"
