@@ -24,6 +24,7 @@ PV_MIN_DIAS = 5                       # días con dato necesarios para decidir q
 EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
 YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
 CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
+CONSUMO_BAJO = 0.75                   # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
 
 def patron_yield(ciudad):
     """Yield patrón (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
@@ -568,13 +569,14 @@ def main():
             continue
         R = analizar(s, D, W0, W1, dias)
         inv, _ = elegir_activo(s["inv"], D, ["BattSOC", "voltGridA", "activityState"])
-        hist = {}
+        hist, dem_hist = {}, {}
         if True:
             for q in range(1, 10):
                 d0 = dias[0][0] - q * 86400000
                 b = bal_dia(s, d0, d0 + 86400000)
                 hist[d0] = b[0] if (b and b[0] > 0) else None
-        R["pv_hist"] = hist
+                dem_hist[d0] = b[1] if (b and b[1] > 0) else None      # consumo del cliente (demanda del medidor solar) de cada día previo
+        R["pv_hist"] = hist; R["dem_hist"] = dem_hist
         RS.append(R)
     # casas que solo tienen baterías: cortes, SOC y eventos del inversor, sin generación FV
     RB = [analizar(s, D, W0, W1, dias) for s in SOLO_BAT if s["inv"] or s["red"]]

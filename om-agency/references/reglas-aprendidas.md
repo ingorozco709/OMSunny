@@ -385,3 +385,15 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** la columna "Frente al yield patrón" de la tabla "Rendimiento" es el yield anual proyectado del sistema (generación real del último día evaluado ÷ kWp × 365) dividido entre el patrón de su región; el patrón se muestra en el encabezado de cada ciudad. Reemplaza la comparación anterior "frente a su patrón" (índice del día contra la mediana de los 9 días previos de la misma casa), que ya no se usa. La alerta "baja vs patrón" (con "con corte" si el sistema estuvo 30 min o más sin red) aparece por debajo del 75 % del patrón; se retiró la alerta "baja de forma sostenida", que dependía de la comparación anterior. No hay alerta para valores altos. Con el 5-oct, los sistemas más por encima del patrón de Cali fueron Casa 23 (139 %), Casa 76 (131 %) y Casa 48PC (128 %), los mismos que se señalaron para revisar la potencia instalada.
 
 **Dónde está el código:** `YIELD_PATRON` y `patron_yield` en `reporte-diario/reporte_diario.py`; cálculo en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Alerta "baja vs patrón": "bajo consumo" en vez de "con corte"
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** en la alerta de rendimiento, en vez de "con corte" se evalúa si el consumo de la vivienda bajó y, si es así, se escribe **"bajo consumo"**.
+
+**Por qué:** el "con corte" se calculaba con los cortes de toda la ventana de 24 h, incluidos los del día siguiente a la generación evaluada, y no explicaba el yield bajo de ese día.
+
+**Cómo se aplicó:** "baja vs patrón" (por debajo del 75 % del yield patrón de su región) lleva ", bajo consumo" cuando el consumo del cliente (demanda del medidor solar) del día evaluado fue menor al 75 % del habitual de esa casa, medido como la mediana de sus 9 días previos (mínimo 3 días con dato; el umbral es `CONSUMO_BAJO`). Criterio por confirmar con el usuario: el 75 % y la base de comparación (mediana de los días previos). Con el 5-oct, "bajo consumo" salió en las Casas 10, 11, 35, 48, 57, 60p, 73 y 287; no en las 18PR, 55p, 77, 99, 104 y 111, que consumieron entre el 78 % y el 112 % de lo habitual.
+
+**Dónde está el código:** `CONSUMO_BAJO` en `reporte-diario/reporte_diario.py`; `dem_hist` en `main()` y la alerta en `reporte-diario/reporte_html.py`.

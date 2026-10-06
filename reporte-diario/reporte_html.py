@@ -66,13 +66,17 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         # frente al yield patrón de su región (Cali / costa), definido por el usuario: yield anual proyectado del sistema ÷ patrón
         R["patron"] = patron_yield(s["ciudad"])
         R["ratio"] = (R["sy_anual"] / R["patron"]) if (R["sy_anual"] is not None and R["patron"]) else None
+        # bajo consumo: el consumo del cliente (demanda del medidor solar) en los días evaluados cayó por debajo de CONSUMO_BAJO del habitual de la casa
+        # (mediana de sus días previos, mínimo 3 días con dato)
+        dem_v = list(R["dem"].values()); prev = [v for v in R.get("dem_hist", {}).values() if v]
+        R["bajo_consumo"] = bool(dem_v and all(v is not None for v in dem_v) and len(prev) >= 3 and sum(dem_v) / ndias < CONSUMO_BAJO * st.median(prev))
         flag = None
         if R["pv_tot"] is None:
             flag = ("off", "sin cierre diario del medidor")
         elif R["pv_tot"] == 0:
             flag = ("crit", "sin producción")
         elif R["ratio"] is not None and R["ratio"] < 0.75:
-            flag = ("warn", "baja vs patrón" + (", con corte" if sum(c["dur"] or 0 for c in R["cortes"]) >= 1800 else ""))
+            flag = ("warn", "baja vs patrón" + (", bajo consumo" if R["bajo_consumo"] else ""))
         R["flag"] = flag
     pv_total = sum(R["pv_tot"] for R in RS if R["pv_tot"] is not None)
     # patrón del portafolio Sunny: media de la generación total de los días previos con la misma lista de sistemas
@@ -421,7 +425,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Rendimiento de los sistemas</h2>
   <div class="card">
     {sec_pv}
-    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón.</p>
+    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos.</p>
   </div>
 </section>
 
