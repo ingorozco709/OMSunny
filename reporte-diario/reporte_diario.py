@@ -487,13 +487,17 @@ def main():
     with cf.ThreadPoolExecutor(8) as ex:
         for i, d in ex.map(lambda t: serie(*t), tareas3):
             HMC[i] = {"CenergyAI": S(d, "CenergyAI"), "CenergyAE": S(d, "CenergyAE")}
-    # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV)
+    # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV);
+    # estas últimas no suman en generación, yield, cobertura ni exportación, pero se analizan aparte (SOLO_BAT)
     manual_ex, manual_in = cargar_exclusiones()
     EXCLUIDOS.clear()
+    SOLO_BAT = []
     for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
         m = motivo_exclusion(SYS[k], HPD, h0, dias[-1][1], manual_ex, manual_in)
         if m:
             EXCLUIDOS.append((k[0], SYS[k]["casa"], m))
+            if m != "piloto":
+                SOLO_BAT.append(SYS[k])
     for ciudad, casa, _ in EXCLUIDOS:
         del SYS[(ciudad, casa)]
     # telemetría
@@ -502,7 +506,7 @@ def main():
     MS = "event,activityState,energyAI,voltageA"
     tipo = {dv["id"]["id"]: dv["type"] for dv in devs}
     tareas = []
-    for s in SYS.values():
+    for s in list(SYS.values()) + SOLO_BAT:
         for r in s["inv"]: tareas.append((r["id"], IK, W0 - 4 * 3600000, W1 + 600000))
         for r in s["red"]: tareas.append((r["id"], MR, W0 - 12 * 3600000, W1 + 600000))
         for r in s["solar"]: tareas.append((r["id"], MS, W0 - 12 * 3600000, W1 + 600000))
@@ -527,12 +531,14 @@ def main():
                 hist[d0] = b[0] if (b and b[0] > 0) else None
         R["pv_hist"] = hist
         RS.append(R)
+    # casas que solo tienen baterías: cortes, SOC y eventos del inversor, sin generación FV
+    RB = [analizar(s, D, W0, W1, dias) for s in SOLO_BAT if s["inv"] or s["red"]]
     if os.environ.get("DUMP_PK"):
         import pickle; pickle.dump((RS, D, W0, W1), open(os.environ["DUMP_PK"], "wb"))
     if os.environ.get("DUMP_SV"):
         json.dump([dict(casa=R["sys"]["casa"], ciudad=R["sys"]["ciudad"], en_curso=R["en_curso"], sol_v=R.get("sol_v"), bess=R.get("bess"), W1=W1) for R in RS], open(os.environ["DUMP_SV"], "w"))
     exec(open(os.path.join(HERE, "reporte_html.py"), encoding="utf8").read(), globals())
-    generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons)
+    generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB)
 
 if __name__ == "__main__":
     main()

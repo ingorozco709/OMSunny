@@ -282,3 +282,15 @@ Reportes Operativos Periódicos.
 - Casos de referencia (6-oct, Cali, corte desde las 09:30): Casa 99 respaldó 30 min y cayó 20 min con SOC 10 % (hueco `po` 10:00:27, `pr` 10:20:07), luego se recuperó con el solar cargando la batería a 4 kW; Casa 35 cayó 155 s con SOC 96 % (revisar inversor).
 
 **Dónde está el código:** `reporte-diario/` (rama `claude/loving-hawking-iwftvn`). Abrir una sesión nueva para reportes de interrupciones: leer `reporte-diario/README.md` y este archivo antes de generar.
+
+## 2026-10-06 — Casas solo con baterías y baterías en reserva en el reporte diario
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Decisiones del usuario ("adelante" sobre la propuesta):**
+- Las casas que solo tienen baterías (hoy Casa 447p) no suman en generación, yield, cobertura ni exportación, pero **sí se reportan**: tabla propia "Casa solo con baterías (sin FV)" con cortes, tiempo sin red, tiempo que vio la casa, respaldo del peor corte, SOC inicio → mín → fin del mayor corte, SOC actual y estado "Ahora". Entran todas las excluidas por `exclusiones.json` o por la regla automática de "sin generación FV"; los pilotos siguen excluidos de todo.
+- Sus eventos de inversor (p. ej. `igf`) cuentan en el punto "Inversores".
+- Punto "Baterías en reserva": todos los sistemas (con o sin corte, incluidos los solo-baterías) con SOC de 22 % o menos en el último dato disponible al corte del reporte. El SOC "actual" es el último dato del inversor y se muestra con su hora, no la muestra fija de las 07:00.
+- `potencia_instalada.json` sale de `Casas_V2.xlsx` (2026-10-06): Casas 412p y 425p pasan de 2,975 a 5,36 kWp. La fila "Piloto Promigas" del archivo no se incluye (pilotos excluidos).
+
+**Dónde está el código:** `reporte-diario/` (`reporte_diario.py`, `reporte_html.py`).

@@ -36,7 +36,10 @@ def _pill(nivel, txt):
     return f'<span class="pill {nivel}">{esc(txt)}</span>'
 
 
-def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
+def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
+    # RB: casas que solo tienen baterías (sin FV). Entran en la tabla propia, en baterías en reserva y en los
+    # eventos del inversor, pero no en generación, yield, cobertura, exportación ni en los totales de cortes.
+    RB = sorted(RB, key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
     css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS
     n_sys = len(RS)
     ciudades = sorted({R["sys"]["ciudad"] for R in RS}, key=ordenar_ciudad)
@@ -174,12 +177,20 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     if fuera:
         P.append(("warn", "Respaldo", f"{_pl(len(fuera), 'hueco', 'huecos')} de tensión de 10 s o más en {_pl(len(set(id(R) for R, _ in fuera)), 'casa', 'casas')} sin un corte de red asociado en los medidores de red (el mayor, {fmt(max(h['d'] for R, h in fuera))})."))
     # baterías
-    agot = [(R, c) for R in RS for c in R["cortes"] if c.get("socmin") is not None and c["socmin"] <= RESERVA]
+    TODOS = list(RS) + list(RB)
+    agot = [(R, c) for R in TODOS for c in R["cortes"] if c.get("socmin") is not None and c["socmin"] <= RESERVA]
     if agot:
         P.append(("crit", "Baterías", f"{len(set(id(R) for R, _ in agot))} sistemas llegaron a la reserva (SOC de {RESERVA:.0f} % o menos) durante un corte: " + ", ".join(sorted({R['sys']['casa'] for R, _ in agot}, key=num_casa)) + "."))
+    # baterías en reserva al último dato (tengan o no corte); la hora se muestra solo si el dato tiene más de 30 min
+    en_reserva = sorted((R for R in TODOS if R["soc_ult"] and R["soc_ult"][1] <= RESERVA), key=lambda R: num_casa(R["sys"]["casa"]))
+    if en_reserva:
+        def _res(R):
+            t, v = R["soc_ult"]
+            return f"{R['sys']['casa']} ({v:.0f} %" + (f", {hb(t)}" if W1 - t > 30 * 60000 else "") + ")"
+        P.append(("warn", "Baterías en reserva", f"Con batería en reserva al corte del reporte, {hb(W1)} (SOC de {RESERVA:.0f} % o menos): " + ", ".join(_res(R) for R in en_reserva) + "."))
     # inversores
-    fallas = [(R, t, v) for R in RS for t, v in R["est"] if v in ("fault", "alarm")]
-    cods = [(R, t, v) for R in RS for t, v in R["codigos"]]
+    fallas = [(R, t, v) for R in TODOS for t, v in R["est"] if v in ("fault", "alarm")]
+    cods = [(R, t, v) for R in TODOS for t, v in R["codigos"]]
     if fallas or cods:
         txt = []
         if fallas:
@@ -267,6 +278,30 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
         rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(mayor["dur"] or 0)}<small>{hbd(mayor["a"])}</small></td><td class="n">{fmt(perc) if perc else "—"}</td><td class="n">{(dec(min(cobs), 1) + " %") if cobs else "—"}</td><td class="n">{soc_uno(mayor.get("soc0"))}</td><td class="n">{soc_uno(mayor.get("soc1"))}</td><td>{estado}</td><td>{celda_resp}</td></tr>')
     sis_head = '<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Mayor corte</th><th class="n">Tiempo que<br>vio la casa</th><th class="n">Respaldo<br>peor corte</th><th class="n">SOC al inicio<br>mayor corte</th><th class="n">SOC al final<br>mayor corte</th><th>Ahora</th><th>Veredicto<br>de respaldo</th>'
     sec_sis = tabla(sis_head, rows, 900) if rows else ""
+    # casas que solo tienen baterías (sin FV): se reportan aparte
+    sec_bat = ""
+    if RB:
+        rows = []
+        for R in RB:
+            s = R["sys"]; cc = R["cortes"]
+            if cc:
+                mayor = max(cc, key=lambda c: c["dur"] or 0)
+                perc = sum(c["perc"] for c in cc); cobs = [c["cob"] for c in cc if c["cob"] is not None]
+                celdas = [str(len(cc)), fmt(sum(c["dur"] or 0 for c in cc)), fmt(perc) if perc else "—", (dec(min(cobs), 1) + " %") if cobs else "—", soc_txt(mayor)]
+            else:
+                celdas = ["0", "—", "—", "—", "—"]
+            soc = R["soc_ult"]
+            soc_act = f"{soc[1]:.0f} %<small>{hb(soc[0])}</small>" if soc else "—"
+            estado = _pill("crit", "sin red") if R["en_curso"] else ""
+            rows.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td>' + "".join(f'<td class="n">{x}</td>' for x in celdas) + f'<td class="n">{soc_act}</td><td>{estado}</td></tr>')
+        bat_head = '<th>Casa</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Tiempo que<br>vio la casa</th><th class="n">Respaldo<br>(peor corte)</th><th class="n">SOC inicio → mín → fin<br>(mayor corte)</th><th class="n">SOC<br>actual</th><th>Ahora</th>'
+        uno = len(RB) == 1
+        sin_cortes = all(not R["cortes"] for R in RB)
+        nota_bat = (f'SOC del último dato del inversor (hora debajo de cada valor). {", ".join(R["sys"]["casa"] for R in RB)} '
+                    + ("solo tiene baterías instaladas" if uno else "solo tienen baterías instaladas")
+                    + (": no cuenta" if uno else ": no cuentan") + " en generación, yield, cobertura ni exportación"
+                    + ((", y no tuvo cortes de red" if uno else ", y no tuvieron cortes de red") if sin_cortes else "") + ".")
+        sec_bat = f'<h3>{"Casa solo con baterías (sin FV)" if uno else "Casas solo con baterías (sin FV)"}</h3>' + tabla(bat_head, rows, 900) + f'<p class="note">{esc(nota_bat)}</p>'
     # detalle por corte
     rows = []
     for R in con_cortes:
@@ -335,6 +370,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
             rows.append(f'<tr><td><b>{_dia(d0)}</b></td><td class="n">{len(cd)}</td><td class="n">{sd}</td><td class="n">{dec(pvd, 0)}</td><td class="n">{dec(exd, 0)}</td><td class="n">{dec(imd, 0)}</td></tr>')
         sec_dia = '<section><h2>Por día</h2><div class="card">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.</p></div></section>'
 
+    lim_bat = (" Las casas que solo tienen baterías instaladas (" + ", ".join(R["sys"]["casa"] for R in RB) + ") se muestran en su propia tabla y no cuentan en generación, yield, cobertura ni exportación.") if RB else ""
     estado_cls = "warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
     gen = fecha_bog(int(time.time() * 1000))
@@ -378,6 +414,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     <h3>Eventos de red</h3>
     {sec_ev}
     {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
+    {sec_bat}
     {sec_det}
     <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte.</p>
   </div>
@@ -412,7 +449,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
     <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>
-    <p>Si a un medidor aún no le llegó el cierre diario de las 00:00 (hoy, Casa 9G y Casa 108), su generación del día queda sin calcular y no se reemplaza por otro dato. La generación de todos los sistemas se calcula con el balance de medidores. Queda fuera la casa que solo tiene baterías instaladas, Casa 447p ({len([x for x in EXCLUIDOS if x[2] != 'piloto'])} casa fuera del reporte).</p>
+    <p>Si a un medidor aún no le llegó el cierre diario de las 00:00 (hoy, Casa 9G y Casa 108), su generación del día queda sin calcular y no se reemplaza por otro dato. La generación de todos los sistemas se calcula con el balance de medidores.{lim_bat}</p>
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
@@ -420,7 +457,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons):
 '''
     with open(args.salida, "w", encoding="utf8") as f:
         f.write(pagina)
-    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
+    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], solo_baterias=[R["sys"]["casa"] for R in RB], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
                    pv_kwh=round(pv_total), yield_anual=round(yield_flota) if yield_flota else None, cobertura_pct=round(cob_flota, 1) if cob_flota is not None else None, exp_kwh=round(exp_tot), imp_kwh=round(imp_tot), puntos=[f"{t}: {x}" for n, t, x in P])
     with open(args.json, "w", encoding="utf8") as f:
         json.dump(resumen, f, ensure_ascii=False, indent=1)

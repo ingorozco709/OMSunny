@@ -7,6 +7,8 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 - Puntos más relevantes, ordenados por gravedad (cortes en curso, inversores aislados, respaldo, baterías en reserva, inversores con falla, rendimiento, exportación, comunicación).
 - Resumen por ciudad: generación FV, yield anual proyectado, cobertura solar (generación ÷ consumo de los clientes) y cortes de red.
 - Interrupciones por sistema ("Por sistema"): cortes de red (medidor de red), tiempo que vio la casa (huecos de tensión del medidor solar), % de respaldo del peor corte (fórmula del equipo: (T red − T solar) / T red), SOC al inicio y al final del mayor corte, estado "Ahora" y **veredicto de respaldo** (ver abajo). Detalle por corte en un desplegable.
+- Casas solo con baterías (sin FV), en su propia tabla: cortes, tiempo sin red, respaldo, SOC inicio → mín → fin del mayor corte, SOC actual (último dato del inversor, con su hora) y estado "Ahora". Entran todas las casas excluidas por `exclusiones.json` o por la regla automática de "sin generación FV" (inversor que no pasa de 5 kWh/día en 5 días o más), no los pilotos. No suman en generación, yield, cobertura ni exportación; sus eventos del inversor (p. ej. `igf`) sí cuentan en "Inversores".
+- Punto "Baterías en reserva": todos los sistemas (también los solo-baterías, tengan o no corte) cuyo último SOC es de 22 % o menos (`RESERVA`); la hora de cada dato se muestra solo si tiene más de 30 min respecto del corte del reporte.
 - Rendimiento: generación FV diaria por balance de medidores, yield en kWh/kWp y comparación con el patrón propio de cada casa.
 - Exportación de energía activa (`energyAE` del medidor de red), importación y consumo del lado respaldado.
 - Comunicación: dispositivos con último dato de más de 2 h.
@@ -19,10 +21,10 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 - **Veredicto de respaldo por corte** (`veredicto_respaldo` en `reporte_diario.py`): sin hueco en el medidor solar → *Respaldo total*; solo hueco "al caer" de ≤ 2 min (transferencia a isla) → *Respaldo total con transferencia*; hueco "durante" ≥ 2 min → *Caída durante el respaldo* (causa: batería agotada si SOC ≤ 12 %, si no "revisar inversor"); corte más corto que la transferencia y cobertura < 5 % → *Sin respaldo*. "Alimenta": mediana de `BattPower` en el corte (>200 W batería, < −200 W solar, si no solar + batería llena). En cortes abiertos el veredicto es provisional.
 - **No usar** un umbral de tensión del medidor solar (p. ej. 130 V) para decidir si hay respaldo: no se cumple en todos los sistemas (Casa 99 respaldó con 119–123 V).
 - Nunca la palabra "flota": usar "conjunto de sistemas" o "portafolio Sunny".
-- Pilotos (Promigas) excluidos siempre; Casa 447p solo baterías, excluida (ver `exclusiones.json`).
+- Pilotos (Promigas) excluidos siempre. Casa 447p, solo baterías: excluida de generación, yield y cobertura (ver `exclusiones.json`), pero se reporta en la tabla de casas solo con baterías.
 
 ## Estilo del reporte
-`estilos.css` + `EXTRA_CSS` de `reporte_html.py` (encabezados de tablas con `<br>` y fuente 9,5 px para que no se apilen). Referencia visual: `ejemplo/reporte_2026-10-06.html` (versión publicada del 6 de octubre; incluye una tabla manual de la Casa 447p, que el generador no produce). Publicar el HTML como Artifact actualizando siempre la misma URL del reporte diario.
+`estilos.css` + `EXTRA_CSS` de `reporte_html.py` (encabezados de tablas con `<br>` y fuente 9,5 px para que no se apilen). Referencia visual: `ejemplo/reporte_2026-10-06.html` (versión publicada del 6 de octubre; su tabla de la Casa 447p y los puntos "Baterías en reserva" e "Inversores igf" se agregaron a mano y hoy los genera el script). Publicar el HTML como Artifact actualizando siempre la misma URL del reporte diario.
 
 ## Uso
 ```
@@ -40,5 +42,5 @@ Requiere las variables `METRUM_API_URL`, `METRUM_USERNAME` y `METRUM_PASSWORD`. 
 
 ## Pendientes conocidos
 - Casas 9G y 108 sin cierre diario del 6-oct en el medidor: quedan sin generación hasta que llegue el cierre.
-- La tabla "Casa solo con baterías (sin FV)" y los puntos "Baterías en reserva" / "Inversores igf" del reporte publicado del 6-oct se agregaron a mano; el generador aún no los produce.
+- `potencia_instalada.json` se actualizó con `Casas_V2.xlsx` (Casas 412p y 425p pasaron de 2,975 a 5,36 kWp). En ese archivo la columna de paneles de ambas sigue en 5 (5 × 0,595 kWp = 2,975): falta confirmar la cantidad de paneles.
 - Depuración: `DUMP_SV=f.json` y `DUMP_PK=f.pkl` guardan datos intermedios sin tocar el reporte.
