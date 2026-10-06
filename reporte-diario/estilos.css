@@ -16,7 +16,7 @@
   --accent:#78b8e3; --crit-ink:#ff9a9a; --crit-bg:#2c1717; --ser-ink:#f5a283; --ser-bg:#2b1d16; --warn-ink:#f5c45c; --warn-bg:#2a2213;
   --off-ink:#b6c1ca; --off-bg:#222a31; --isl-ink:#8cc6ec; --isl-bg:#16262f; --good:#38b838; color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-b);font-size:15px;line-height:1.55;padding-inline:clamp(16px,4vw,40px);padding-block:28px 56px}
-.wrap{max-width:1040px;margin-inline:auto;display:flex;flex-direction:column;gap:28px}
+.wrap{width:100%;max-width:none;margin-inline:0;display:flex;flex-direction:column;gap:28px}
 h1,h2,h3{font-family:var(--f-d);text-wrap:balance;margin:0;font-weight:600;letter-spacing:.005em}
 .kick{font-family:var(--f-m);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 header{display:flex;flex-direction:column;gap:10px}
