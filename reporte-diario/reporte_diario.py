@@ -24,7 +24,9 @@ PV_MIN_DIAS = 5                       # días con dato necesarios para decidir q
 EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
 YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
 CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
-CONSUMO_BAJO = 0.75                   # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
+BATERIA_LLENA_SOC = 99                # % de SOC con el que se considera la batería llena
+LLENO_ANTES_H = 12                    # hora local: batería llena antes de esta hora = "producción limitada" (con la batería llena la producción se limita al consumo)
+CONSUMO_BAJO = 0.75                  # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
 
 def patron_yield(ciudad):
     """Yield patrón (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
@@ -576,8 +578,19 @@ def main():
                 b = bal_dia(s, d0, d0 + 86400000)
                 hist[d0] = b[0] if (b and b[0] > 0) else None
                 dem_hist[d0] = b[1] if (b and b[1] > 0) else None      # consumo del cliente (demanda del medidor solar) de cada día previo
-        R["pv_hist"] = hist; R["dem_hist"] = dem_hist
+        R["pv_hist"] = hist; R["dem_hist"] = dem_hist; R["inv_id"] = inv["id"] if inv else None
         RS.append(R)
+    # batería llena: primera hora de cada día evaluado en que el SOC llega a BATERIA_LLENA_SOC entre las 06:00 y las 18:00. Explica un yield bajo en sistemas
+    # sin exportación: con la batería llena el inversor limita la producción FV al consumo de la casa.
+    def _lleno(t):
+        R, d0, d1 = t
+        pts = sorted((p["ts"], num(p["value"])) for p in serie(R["inv_id"], "BattSOC", d0, d1, 1000)[1].get("BattSOC", []))
+        return R, d0, next((ts for ts, v in pts if v is not None and v >= BATERIA_LLENA_SOC and d0 + 6 * 3600000 <= ts <= d0 + 18 * 3600000), None)
+    for R in RS:
+        R["lleno"] = {}
+    with cf.ThreadPoolExecutor(8) as ex:
+        for R, d0, ts in ex.map(_lleno, [(R, d0, d1) for R in RS if R["inv_id"] for d0, d1 in dias]):
+            R["lleno"][d0] = ts
     # casas que solo tienen baterías: cortes, SOC y eventos del inversor, sin generación FV
     RB = [analizar(s, D, W0, W1, dias) for s in SOLO_BAT if s["inv"] or s["red"]]
     if os.environ.get("DUMP_PK"):

@@ -397,3 +397,15 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** "baja vs patrón" (por debajo del 75 % del yield patrón de su región) lleva ", bajo consumo" cuando el consumo del cliente (demanda del medidor solar) del día evaluado fue menor al 75 % del habitual de esa casa, medido como la mediana de sus 9 días previos (mínimo 3 días con dato; el umbral es `CONSUMO_BAJO`). Criterio por confirmar con el usuario: el 75 % y la base de comparación (mediana de los días previos). Con el 5-oct, "bajo consumo" salió en las Casas 10, 11, 35, 48, 57, 60p, 73 y 287; no en las 18PR, 55p, 77, 99, 104 y 111, que consumieron entre el 78 % y el 112 % de lo habitual.
 
 **Dónde está el código:** `CONSUMO_BAJO` en `reporte-diario/reporte_diario.py`; `dem_hist` en `main()` y la alerta en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Alerta "producción limitada (batería llena)" en la tabla de rendimiento
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario ("agrégala"):** cuando un sistema tenga el yield bajo (por debajo del 75 % del patrón de su región) y la batería llegue a la carga completa temprano, la alerta lo indica con "producción limitada (batería llena HH:MM)".
+
+**Hallazgo que la originó (5-oct, Casas 99, 18PR, 111, 55p, 77 y 104, sin fallas, sin cortes y con consumo normal o habitual):** la batería llegó a 99 % entre las 08:45 y las 13:15 y desde entonces la producción FV igualó al consumo de la casa (curva reconstruida como consumo − red − potencia de batería, válida para Deye; en Livoltek el signo de `BattPower` es distinto). Como los sistemas no exportan, con la batería llena el inversor limita la producción al consumo: el yield mide la energía solar consumida y no la que el sistema podría producir. Además el balance de medidores no cuenta la energía que la batería almacena en el día (Casa 111: +5,7 kWh; Casa 77: +1,9 kWh); no se ajustó la regla de generación por balance.
+
+**Criterio (mío, por confirmar con el usuario):** primera muestra de SOC ≥ 99 % entre las 06:00 y las 18:00 del día evaluado, y antes de las 12:00 (constantes `BATERIA_LLENA_SOC` y `LLENO_ANTES_H`). Con varios días evaluados (lunes), se exige en al menos la mitad. Solo se muestra junto a "baja vs patrón"; puede acompañar a "bajo consumo". Con el 5-oct salió en las Casas 10, 11, 18PR, 35, 48, 57, 73, 77, 99, 104 y 111; no en la 55p (batería llena a las 13:15), 60p ni 287.
+
+**Dónde está el código:** `_lleno` en `main()` de `reporte-diario/reporte_diario.py`; la alerta en `reporte-diario/reporte_html.py`.
