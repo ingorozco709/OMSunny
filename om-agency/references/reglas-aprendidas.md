@@ -215,3 +215,30 @@ comandos) y no envía comandos a los equipos. Cuando un reporte detecte algo que
 cambio en Metrum (por ejemplo, inversores retirados que siguen registrados), lo deja como
 tarea del equipo, redactada para que la haga una persona, y no ofrece ejecutarlo ni
 pregunta si debe hacerlo.
+
+## 2026-10-05 — Cálculo del tiempo y del % de respaldo
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador
+de Reportes Operativos Periódicos y Líder de Diagnóstico de Fallas.
+
+**Regla (criterio del usuario):**
+- Tiempo de respaldo = tiempo sin tensión del medidor de red − tiempo sin tensión del
+  medidor solar.
+- % de respaldo = tiempo de respaldo ÷ tiempo de la interrupción total (el que mide el
+  medidor de red). Se calcula por cada interrupción y también en el total del día de cada
+  casa.
+- Fundamento: el medidor de red detecta las interrupciones del operador de red (OR) y el
+  medidor solar detecta las interrupciones que el cliente ve realmente.
+
+**Cómo se mide:** el tiempo sin tensión de cada medidor es la suma de los tramos entre
+`po` y `pr`, con la hora al segundo de cada evento (no con las muestras de 15 min). Cada
+tramo del medidor solar se asigna a la interrupción del medidor de red que lo contiene;
+si cae fuera de todas, a la más cercana dentro de 3 min, porque los relojes de los
+medidores no están alineados (hasta unos 40 s). Un hueco del medidor solar a mitad de una
+interrupción del OR cuenta dentro de esa interrupción y no se llama "aislado". Un hueco
+sin ninguna interrupción del OR cerca no entra en el %: se reporta aparte. Si la casa no
+tiene datos en esa interrupción se escribe "s/d"; no se calcula ni se asume 0 %.
+
+**Relación con reglas anteriores:** el "tiempo sin tensión" que ve la casa (suma de los
+huecos del medidor solar) se sigue mostrando en los reportes de interrupciones; el
+respaldo se agrega junto a él.
