@@ -159,3 +159,114 @@ tensión normal, por lo tanto EMCALI está bien" hecha DESPUÉS de las 13:45 Bog
 2026-09-29 para estas 22 casas está basada en un dato viejo, no en vivo — no se puede
 confirmar el estado real de EMCALI en esos puntos hasta que la plataforma vuelva a
 ingerir `voltageA` del medidor.
+
+## 2026-10-05 — Alcance de los reportes de estado: sin pilotos, solo datos de hoy, casas por nombre
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador
+de Reportes Operativos Periódicos y Líder de Diagnóstico de Fallas (cuando entregue un
+reporte).
+
+**1. Excluir siempre los sistemas piloto de todo reporte.** Un sistema es piloto si el
+nombre de su gateway o su atributo `spcus` (nombre de la casa/cliente) contiene "piloto"
+(sin distinguir mayúsculas). Se excluyen el gateway y todos los inversores y medidores
+que lo tienen en su atributo `gateway`: no se consultan, no se listan y no cuentan en
+ningún total (sitios, dispositivos, disponibilidad, generación). Hoy son dos sitios de la
+zona OFICINA PROMIGAS (Barranquilla), 8 dispositivos en total: el gateway `Piloto` y el
+gateway `IN42420373` (`spcus` = "Piloto Promigas"), con los inversores
+`HV2150024762` y `HP315K2HWC290014` y los medidores `2220231041`, `2223005621`,
+`2223005627` y `2223005649`. Esta exclusión es una instrucción del usuario, distinta de
+la lista de dispositivos fantasma: no se reincluye aunque un piloto muestre telemetría
+nueva. Si no está claro si un sistema es piloto, preguntar antes de incluirlo.
+
+**2. Reporte de estado de operación: solo datos de hoy.** El rango es desde las 00:00
+hora Bogotá del día del reporte hasta la hora de corte. Estado actual con consulta de
+último valor (sin rango); interrupciones, eventos, voltajes, corrientes y disponibilidad
+con ventanas de hoy. No consultar histórico de 7 o 30 días para este reporte. Un equipo
+sin datos hoy se reporta como "sin datos hoy" con la hora de su último valor (consulta de
+último valor, no un barrido de histórico). Esta regla acota la verificación del
+2026-09-25 ("pedir el histórico de varios días"): en el reporte de estado, "sostenido" se
+evalúa dentro del día. Si el usuario pide tendencias o un periodo, se consulta ese rango.
+
+**3. Identificar las casas por su nombre.** El nombre de la casa está en el atributo
+`spcus` del gateway (ej. "Casa 24"); los inversores y medidores lo heredan por su
+atributo `gateway`. En cada reporte, ese nombre va como identificador principal junto con
+el conjunto o zona, y el serial del equipo solo como dato secundario. Mapa de Barranquilla
+al 2026-10-05: gateway 1023 = Casa 24, 1026 = Casa 155 y 1030 = Casa 287 (Terra by Kaia);
+1039 = Casa 9G (Gerona Club House); IN42420393 = Casa 121 CR (Castellana Real). Leer
+`spcus` en vivo en cada reporte, porque el mapa puede cambiar. El operador de red
+(`spdno`) de esta zona es Air-e.
+
+**Aclaración (2026-10-05, mismo día):** el usuario confirmó que los sistemas de Oficina
+Promigas son los pilotos y que deben excluirse de todos los reportes, sin mencionarlos
+ni siquiera como nota. Los reportes solo dicen, en general, que los sistemas piloto están
+excluidos. Además, el reporte de estado de operación de una zona sigue el formato del
+reporte de interrupciones de Cali (titular con la conclusión, KPIs, "Qué pasó", tabla por
+casa con el tiempo sin tensión en cada evento, línea de tiempo, batería durante el corte,
+pendientes y límites del análisis), pero solo con datos de hoy: sin comparar con ayer ni
+citar fechas de días anteriores.
+
+## 2026-10-05 — Permisos: solo lectura en Metrum
+
+**Aplica a:** todos los especialistas.
+
+**Regla:** el agente solo tiene permiso para consultar datos y generar los reportes que se
+le pidan. No da de baja, edita ni escribe nada en Metrum (dispositivos, atributos o
+comandos) y no envía comandos a los equipos. Cuando un reporte detecte algo que pida un
+cambio en Metrum (por ejemplo, inversores retirados que siguen registrados), lo deja como
+tarea del equipo, redactada para que la haga una persona, y no ofrece ejecutarlo ni
+pregunta si debe hacerlo.
+
+## 2026-10-05 — Cálculo del tiempo y del % de respaldo
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador
+de Reportes Operativos Periódicos y Líder de Diagnóstico de Fallas.
+
+**Regla (criterio del usuario):**
+- Tiempo de respaldo = tiempo sin tensión del medidor de red − tiempo sin tensión del
+  medidor solar.
+- % de respaldo = tiempo de respaldo ÷ tiempo de la interrupción total (el que mide el
+  medidor de red). Se calcula por cada interrupción y también en el total del día de cada
+  casa.
+- Fundamento: el medidor de red detecta las interrupciones del operador de red (OR) y el
+  medidor solar detecta las interrupciones que el cliente ve realmente.
+
+**Cómo se mide:** el tiempo sin tensión de cada medidor es la suma de los tramos entre
+`po` y `pr`, con la hora al segundo de cada evento (no con las muestras de 15 min). Cada
+tramo del medidor solar se asigna a la interrupción del medidor de red que lo contiene;
+si cae fuera de todas, a la más cercana dentro de 3 min, porque los relojes de los
+medidores no están alineados (hasta unos 40 s). Un hueco del medidor solar a mitad de una
+interrupción del OR cuenta dentro de esa interrupción y no se llama "aislado". Un hueco
+sin ninguna interrupción del OR cerca no entra en el %: se reporta aparte. Si la casa no
+tiene datos en esa interrupción se escribe "s/d"; no se calcula ni se asume 0 %.
+
+**Relación con reglas anteriores:** el "tiempo sin tensión" que ve la casa (suma de los
+huecos del medidor solar) se sigue mostrando en los reportes de interrupciones; el
+respaldo se agrega junto a él.
+
+## 2026-10-06 — Vocabulario de los reportes: no usar "flota"
+
+**Aplica a:** todos los especialistas, en todo texto que se entregue (reportes, resúmenes, mensajes).
+
+**Regla (instrucción del usuario, "siempre"):** reemplazar la palabra "flota" por "conjunto de
+sistemas" o "portafolio Sunny". Ejemplos: "cobertura solar del portafolio Sunny", "generación FV
+del conjunto de sistemas". Los nombres de los especialistas (p. ej. "Monitor de Salud de Flota")
+son nombres internos de la skill y no se muestran al usuario en los reportes.
+
+## 2026-10-06 — Cálculo de generación, yield y cobertura de los reportes
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador de
+Reportes Operativos Periódicos.
+
+**Reglas (instrucción del usuario, "siempre"):**
+- Generación diaria = balance de medidores con los cierres diarios de las 00:00: demanda del
+  medidor solar (`CenergyAI`) − importada + exportada del medidor de red (`CenergyAI`/`CenergyAE`).
+  No se usa el contador del inversor (`energyPD`): en casas con inversores nuevos marca unas 10
+  veces menos (verificado el 2026-10-05 contra la app de Deye en la Casa 86p: 13,1 kWh por
+  balance frente a 1,4 kWh del inversor y 14,0 kWh en Deye).
+- Cobertura solar = generación ÷ consumo del cliente (demanda del medidor solar).
+- Yield proyectado anual = suma de la generación diaria real ÷ suma de la potencia instalada
+  pico en DC (kWp) × 365, sin promedios. La potencia sale del archivo de sistemas del usuario
+  (`Casas.xlsx`, copia en `reporte-diario/potencia_instalada.json`), no de `invcap` del inversor.
+- Casa 447p solo tiene baterías instaladas y se excluye de generación, yield y cobertura.
+- Si a un medidor le falta el cierre diario, la generación de esa casa queda sin calcular ("sin
+  cierre diario del medidor"); no se reemplaza por otro dato.
