@@ -45,6 +45,15 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     ciudades = sorted({R["sys"]["ciudad"] for R in RS}, key=ordenar_ciudad)
     ndias = len(dias)
     nombre_dias = [_dia(d0) for d0, _ in dias]
+    # periodos de los datos: la ventana del reporte (no empieza ni termina a medianoche) y los días completos (00:00–24:00, con cierre diario del medidor)
+    def _rango(a, b):
+        cierra_dia = fecha_bog(b).hour == 0 and fecha_bog(b).minute == 0
+        return f"{hb(a)}–{'24:00' if cierra_dia else hb(b)}"
+    vent_h = f"{hbd(W0)} →<br>{hbd(W1)}"
+    per_dias = f"{nombre_dias[0]}<br>00:00–24:00" if ndias == 1 else f"{nombre_dias[0]} a {nombre_dias[-1]}<br>días completos"
+    segs_ex = [(d0, max(d0, W0), min(d1, W1)) for d0, d1 in dias]
+    if dias and W1 > dias[-1][1]:
+        segs_ex.append((dias[-1][1], dias[-1][1], W1))       # hoy, hasta la hora de corte
     titulo = ("Operación fin de semana " if es_lunes else "Operación diaria ") + f"{fin.day} {MESES[fin.month-1]}"
     h_ini = f"{DIAS[ini.weekday()]} {ini.day} {MESES[ini.month-1]} {ini.strftime('%H:%M')}"
     h_fin = f"{DIAS[fin.weekday()]} {fin.day} {MESES[fin.month-1]} {fin.strftime('%H:%M')}"
@@ -230,7 +239,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # KPIs
     k_sis = f'<div class="kpi {"k-crit" if en_curso else ("k-warn" if con_cortes else "k-ok")}"><div class="v">{len(con_cortes)} <small>de {n_sys}</small></div><div class="l">sistemas con cortes de red en la ventana ({total_cortes} cortes en {len(EV)} eventos).{" " + str(len(en_curso)) + " siguen sin red." if en_curso else ""}</div></div>'
     k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV del portafolio Sunny en {ndias} {"día" if ndias == 1 else "días"}{(" (patrón " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
-    k_exp = f'<div class="kpi"><div class="v">{dec(exp_tot, 0)} <small>kWh</small></div><div class="l">de energía activa exportada a la red; importada {dec(imp_tot, 0)} kWh.</div></div>'
+    k_exp = f'<div class="kpi"><div class="v">{dec(exp_tot, 0)} <small>kWh</small></div><div class="l">de energía activa exportada a la red entre el {hbd(W0)} y el {hbd(W1)}; importada {dec(imp_tot, 0)} kWh en el mismo periodo.</div></div>'
     cob_txt = "—"
     if cs:
         cob_txt = dec(cob, 1) + " %"
@@ -340,20 +349,23 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             cols = "".join(f'<td class="n">{_kwh(R["pv"].get(d0))}</td>' for d0, _ in dias)
             fl = _pill({"crit": "crit", "warn": "warn", "off": "off"}[R["flag"][0]], R["flag"][1]) if R["flag"] else ""
             rows.append(f'<tr><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · {dec(s["cap"], 2) if s["cap"] else "—"} kWp</small></td>{cols}<td class="n"><b>{_kwh(R["pv_tot"])}</b></td><td class="n">{dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"}</td><td class="n">{(dec(100*R["ratio"], 0) + " %") if R["ratio"] is not None else "—"}</td><td>{fl}</td></tr>')
-    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente al<br>yield patrón</th><th>Alerta</th>'
+    pv_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>00:00–24:00<br>kWh</th>' for n in nombre_dias) + '<th class="n">Total<br>kWh</th><th class="n">Yield anual<br>proyectado<br>kWh/kWp·año</th><th class="n">Frente al<br>yield patrón</th><th>Alerta</th>'
     sec_pv = tabla(pv_head, rows, 760 + 60 * ndias)
 
     # exportación
     rows = []
     for c in ciudades:
-        rows.append(f'<tr class="ciudad"><td colspan="{7 + ndias}">{esc(c.title())}</td></tr>')
+        rows.append(f'<tr class="ciudad"><td colspan="{7 + len(segs_ex)}">{esc(c.title())}</td></tr>')
         for R in sorted([R for R in RS if R["sys"]["ciudad"] == c], key=lambda R: -(R["exp"].get("total") or 0)):
             s = R["sys"]; t = R["exp"].get("total")
-            cols = "".join(f'<td class="n">{_kwh(R["exp"].get(d0), 2)}</td>' for d0, _ in dias)
+            cols = "".join(f'<td class="n">{_kwh(R["exp"].get(d0), 2)}</td>' for d0, _, _ in segs_ex)
             share = (100 * t / R["pv_tot"]) if (t is not None and R["pv_tot"]) else None
             rows.append(f'<tr><td><b>{esc(s["casa"])}</b></td>{cols}<td class="n"><b>{_kwh(t, 2)}</b></td><td class="n">{_kwh(R["imp"].get("total"), 1)}</td><td class="n">{_kwh(R["cons"].get("total"), 1)}</td><td class="n">{(dec(share, 1) + " %") if share is not None else "—"}</td><td class="n">{_kwh(R["cons_cli"], 1)}</td><td class="n"><b>{(dec(R["cob_sol"], 0) + " %") if R["cob_sol"] is not None else "—"}</b></td></tr>')
-    ex_head = '<th>Sistema</th>' + "".join(f'<th class="n">{esc(n)}<br>kWh</th>' for n in nombre_dias) + '<th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th><th class="n">Consumo lado<br>respaldado kWh</th><th class="n">Exportada /<br>generada</th><th class="n">Consumo del cliente<br>kWh</th><th class="n">Cobertura<br>solar</th>'
-    sec_ex = tabla(ex_head, rows, 760 + 60 * ndias)
+    ex_head = ('<th>Sistema</th>'
+               + "".join(f'<th class="n">{_dia(d0)}<br>{_rango(a, b)}<br>kWh</th>' for d0, a, b in segs_ex)
+               + f'<th class="n">Exportada<br>{vent_h}<br>kWh</th><th class="n">Importada<br>{vent_h}<br>kWh</th><th class="n">Consumo lado respaldado<br>{vent_h}<br>kWh</th>'
+               + f'<th class="n">Exportada / generada<br>(ventana ÷ generación<br>{per_dias})</th><th class="n">Consumo del cliente<br>{per_dias}<br>kWh</th><th class="n">Cobertura solar<br>{per_dias}</th>')
+    sec_ex = tabla(ex_head, rows, 900 + 80 * len(segs_ex))
 
     # comunicación
     rows = []
@@ -449,7 +461,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Exportación de energía activa</h2>
   <div class="card">
     {sec_ex}
-    <p class="note" style="margin-top:10px">Exportada e importada, del medidor de red (<code>energyAE</code> y <code>energyAI</code>). Consumo del cliente = demanda del día calendario en el medidor solar; cobertura solar = generación / consumo del cliente. La generación es el balance de medidores, así que incluye pérdidas y la energía que pasa por la batería. Importada y exportada de la tabla son las de la ventana de 24 h.</p>
+    <p class="note" style="margin-top:10px">Exportada e importada, del medidor de red (<code>energyAE</code> y <code>energyAI</code>). Consumo del cliente = demanda del día calendario en el medidor solar; cobertura solar = generación / consumo del cliente. La generación es el balance de medidores, así que incluye pérdidas y la energía que pasa por la batería. Cada encabezado indica el periodo de su dato: las columnas por día suman la ventana completa (exportada, importada y consumo del lado respaldado, que se miden entre la hora de inicio y la de corte del reporte), mientras que consumo del cliente, generación y cobertura son de días completos, de 00:00 a 24:00, porque dependen de los cierres diarios de los medidores.</p>
   </div>
 </section>
 

@@ -473,6 +473,8 @@ def analizar(s, D, W0, W1, dias):
     segs = []
     for d0, d1 in dias:
         segs.append((d0, max(d0, W0), min(d1, W1)))
+    if dias and W1 > dias[-1][1]:       # parte de hoy dentro de la ventana (el día en curso no tiene cierre diario): se muestra aparte para que las columnas sumen el total
+        segs.append((dias[-1][1], dias[-1][1], W1))
     R["exp"] = {}; R["imp"] = {}; R["cons"] = {}
     for d0, a, b in segs:
         for nombre, L in (("exp", aE), ("imp", aI), ("cons", cI)):

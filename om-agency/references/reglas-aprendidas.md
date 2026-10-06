@@ -427,3 +427,15 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** eliminar también las barras de la tabla "Exportación de energía activa" (la última columna, junto a "Cobertura solar", dibujaba la energía exportada de cada casa frente a la mayor exportadora y se leía como si fuera la cobertura). Con esto el reporte ya no lleva barras en ninguna tabla (las de "Rendimiento" se quitaron antes). Las tablas solo muestran cifras y etiquetas.
 
 **Dónde está el código:** tabla de exportación en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Cada dato del reporte indica su periodo con el rango de horas
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** dejar claro de qué periodo es cada dato, con el día y el rango de horas, en cada encabezado.
+
+**Qué lo originó:** en "Exportación", la columna "lun 5 oct" (0,04 kWh en la Casa 10) y "Exportada" (0,09 kWh) parecían inconsistentes. La primera era solo la parte del lunes dentro de la ventana (17:36 a 24:00) y la segunda toda la ventana de 24 h (5 oct 17:36 → 6 oct 17:36); la exportación de hoy (00:00 a 17:36, 0,06 kWh) no tenía columna. Además la tabla de rendimiento usaba el mismo encabezado "lun 5 oct kWh" para el día completo.
+
+**Cómo se aplicó:** (1) exportación: una columna por día con su rango ("lun 5 oct 17:40–24:00" y "mar 6 oct 00:00–17:40") que suman el total; (2) exportada, importada y consumo del lado respaldado llevan el periodo de la ventana ("5 oct 17:40 → 6 oct 17:40"); (3) consumo del cliente, generación, cobertura y "Exportada / generada" indican "lun 5 oct 00:00–24:00" (días completos, con cierre diario); (4) rendimiento: columnas por día con "00:00–24:00"; (5) la tarjeta de exportación del resumen indica el periodo. La nota bajo la tabla lo explica.
+
+**Dónde está el código:** `_rango`, `vent_h`, `per_dias` y `segs_ex` en `reporte-diario/reporte_html.py`; el segmento de hoy en `analizar` de `reporte-diario/reporte_diario.py`.
