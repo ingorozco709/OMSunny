@@ -25,7 +25,8 @@ EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dej�
 YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
 CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
 BATERIA_LLENA_SOC = 99                # % de SOC con el que se considera la batería llena
-LLENO_ANTES_H = 12                    # hora local: batería llena antes de esta hora = "producción limitada" (con la batería llena la producción se limita al consumo)
+LLENO_TARDE_H = 16                    # hora local: batería llena entre LLENO_ANTES_H y esta hora = "producción limitada en la tarde"; después ya casi no hay sol que limitar
+LLENO_ANTES_H = 12                   # hora local: batería llena antes de esta hora = "producción limitada" (con la batería llena la producción se limita al consumo)
 CONSUMO_BAJO = 0.75                  # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
 
 def patron_yield(ciudad):

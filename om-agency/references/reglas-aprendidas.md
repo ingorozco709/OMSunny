@@ -409,3 +409,13 @@ Reportes Operativos Periódicos.
 **Criterio (mío, por confirmar con el usuario):** primera muestra de SOC ≥ 99 % entre las 06:00 y las 18:00 del día evaluado, y antes de las 12:00 (constantes `BATERIA_LLENA_SOC` y `LLENO_ANTES_H`). Con varios días evaluados (lunes), se exige en al menos la mitad. Solo se muestra junto a "baja vs patrón"; puede acompañar a "bajo consumo". Con el 5-oct salió en las Casas 10, 11, 18PR, 35, 48, 57, 73, 77, 99, 104 y 111; no en la 55p (batería llena a las 13:15), 60p ni 287.
 
 **Dónde está el código:** `_lleno` en `main()` de `reporte-diario/reporte_diario.py`; la alerta en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — "Producción limitada en la tarde" (batería llena entre las 12:00 y las 16:00)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Decisión del usuario (opción 1 de la propuesta):** la alerta de rendimiento distingue dos casos. Batería llena (SOC ≥ 99 %) **antes de las 12:00**: "producción limitada (batería llena HH:MM)", porque se pierde la mayor parte del día. Batería llena **entre las 12:00 y las 16:00**: "producción limitada en la tarde (batería llena HH:MM)", porque solo se limita parte de la tarde. Después de las 16:00 no se marca (ya casi no hay sol que limitar).
+
+**Caso que la originó (5-oct, Turbaco):** Casa 55p (73 % del patrón, producción de 4,6 kW a las 09:45 y batería llena a las 13:15, desde cuando la producción igualó al consumo) y Casa 60p (batería llena a las 14:45). La Casa 287 no entra: su batería no llegó a llenarse; su explicación es "bajo consumo".
+
+**Dónde está el código:** `LLENO_TARDE_H` y `LLENO_ANTES_H` en `reporte-diario/reporte_diario.py`; la alerta en `reporte-diario/reporte_html.py`.

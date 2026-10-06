@@ -70,10 +70,17 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         # (mediana de sus días previos, mínimo 3 días con dato)
         dem_v = list(R["dem"].values()); prev = [v for v in R.get("dem_hist", {}).values() if v]
         R["bajo_consumo"] = bool(dem_v and all(v is not None for v in dem_v) and len(prev) >= 3 and sum(dem_v) / ndias < CONSUMO_BAJO * st.median(prev))
-        # producción limitada: la batería llegó a BATERIA_LLENA_SOC antes de LLENO_ANTES_H en al menos la mitad de los días evaluados; sin exportación,
-        # con la batería llena el inversor limita la producción FV al consumo de la casa
-        temprano = [t for t in R.get("lleno", {}).values() if t is not None and fecha_bog(t).hour < LLENO_ANTES_H]
-        R["limitada"] = bool(temprano) and len(temprano) * 2 >= len(R["lleno"])
+        # producción limitada: sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa.
+        # Batería llena antes de LLENO_ANTES_H (en al menos la mitad de los días evaluados) = "producción limitada";
+        # entre LLENO_ANTES_H y LLENO_TARDE_H = "producción limitada en la tarde" (solo se pierde parte de la tarde).
+        n_ll = len(R.get("lleno", {}))
+        manana = [t for t in R.get("lleno", {}).values() if t is not None and fecha_bog(t).hour < LLENO_ANTES_H]
+        tarde = [t for t in R.get("lleno", {}).values() if t is not None and LLENO_ANTES_H <= fecha_bog(t).hour < LLENO_TARDE_H]
+        R["limitada"] = None
+        if manana and len(manana) * 2 >= n_ll:
+            R["limitada"] = ("", min(manana) if ndias == 1 else None, f"antes de las {LLENO_ANTES_H}:00")
+        elif tarde and (len(manana) + len(tarde)) * 2 >= n_ll:
+            R["limitada"] = (" en la tarde", min(tarde) if ndias == 1 else None, f"entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00")
         flag = None
         if R["pv_tot"] is None:
             flag = ("off", "sin cierre diario del medidor")
@@ -84,7 +91,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             if R["bajo_consumo"]:
                 causas.append("bajo consumo")
             if R["limitada"]:
-                causas.append("producción limitada (batería llena " + (hb(min(temprano)) if ndias == 1 else "antes del mediodía") + ")")
+                suf, t_ll, rango = R["limitada"]
+                causas.append(f"producción limitada{suf} (batería llena {hb(t_ll) if t_ll else rango})")
             flag = ("warn", "baja vs patrón" + "".join(", " + c for c in causas))
         R["flag"] = flag
     pv_total = sum(R["pv_tot"] for R in RS if R["pv_tot"] is not None)
@@ -434,7 +442,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Rendimiento de los sistemas</h2>
   <div class="card">
     {sec_pv}
-    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos. Se añade «producción limitada» cuando la batería llegó a {BATERIA_LLENA_SOC} % antes de las {LLENO_ANTES_H}:00 (se indica la hora): en sistemas sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa, así que el yield mide la energía solar consumida y no la que el sistema podría producir.</p>
+    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos. Se añade «producción limitada» cuando la batería llegó a {BATERIA_LLENA_SOC} % antes de las {LLENO_ANTES_H}:00, y «producción limitada en la tarde» cuando llegó entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00, porque entonces solo se limita parte de la tarde (se indica la hora): en sistemas sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa, así que el yield mide la energía solar consumida y no la que el sistema podría producir.</p>
   </div>
 </section>
 
