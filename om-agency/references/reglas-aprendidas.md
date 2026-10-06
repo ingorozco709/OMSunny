@@ -330,3 +330,16 @@ Reportes Operativos Periódicos.
 **Corrección de asignación (cumple la regla del 2026-10-05 de que cada tramo del medidor solar va a una sola interrupción):** un hueco del medidor solar cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes. Antes, un hueco que empezaba justo antes de un segundo corte (relojes de los medidores desfasados ~23 s) se sumaba también al corte anterior. Caso: Casas 15, 23, 42 y 77 el 6-oct, cortes de red de 12:40 (41 s) y 12:46 (1 h 41 min): el hueco de 5 min 35 s es del segundo corte, pero el primero salía como "Sin respaldo" con respaldo de 0 %.
 
 **Dónde está el código:** `interrupcion_al_caer` y `veredicto_respaldo` (y el reparto de huecos en `analizar`) en `reporte-diario/reporte_diario.py`.
+
+## 2026-10-06 — Tabla "Por sistema" del reporte diario: una columna por corte, con base en el último corte
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** en la tabla "Por sistema", una columna por cada corte de red. El **último corte de red registrado** de cada casa es la referencia y se muestra completo: hora (inicio → fin), duración, SOC de inicio y de fin y % de respaldo. En los cortes que ya pasaron solo se deja una leyenda pequeña con el % de respaldo, nada más.
+
+**Cómo se aplicó:**
+- Las columnas "Mayor corte", "Respaldo peor corte" y "SOC al inicio / al final del mayor corte" se reemplazaron por la columna "Último corte" y las columnas "Anterior 1…4" (del corte anterior más reciente al más antiguo). La hora y la duración de los cortes anteriores salen solo al pasar el cursor.
+- Si una casa tiene más de 4 cortes anteriores, el resto no se muestra en la tabla (se avisa en su celda "Cortes") y queda en el desplegable "Detalle por corte" (Casa 73 tuvo 10 microcortes el 6-oct).
+- Se mantienen "Cortes", "Tiempo sin red", "Tiempo que vio la casa" (suma de todos los cortes), "Ahora" y el veredicto, que sigue siendo el del peor corte (se indica "corte de las HH:MM" cuando no es el último). Criterio por confirmar con el usuario: si el veredicto debe ser el del último corte.
+
+**Dónde está el código:** bloque "una columna por corte" en `reporte-diario/reporte_html.py`.
