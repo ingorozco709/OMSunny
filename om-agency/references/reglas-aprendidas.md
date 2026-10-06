@@ -353,3 +353,11 @@ Reportes Operativos Periódicos.
 **Reemplaza** el criterio de la entrada anterior ("el veredicto sigue siendo el del peor corte", que quedaba por confirmar). Consecuencia: una falla en un corte anterior (p. ej. caída durante el respaldo de la Casa 99 a las 09:29) ya no aparece en la etiqueta de la tabla; sigue visible en el desplegable "Detalle por corte" y en el % de respaldo de ese corte.
 
 **Dónde está el código:** bloque "una columna por corte" en `reporte-diario/reporte_html.py`.
+
+## 2026-10-06 — Cortes anteriores en "Por sistema": % de respaldo con su hora
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** en las columnas "Anterior 1…4" de la tabla "Por sistema", además del % de respaldo se muestra la **hora a la que fue cada corte** (hora de inicio, con fecha solo si no es del día del reporte). Ajusta la entrada anterior ("solo el % de respaldo, nada más"): la hora ahora es visible; la duración sigue saliendo solo al pasar el cursor.
+
+**Dónde está el código:** `_hora` y `celdas_prev` en `reporte-diario/reporte_html.py`.

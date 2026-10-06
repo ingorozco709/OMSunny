@@ -273,6 +273,9 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         if c["b"] is None:
             return "en curso"
         return hb(c["b"]) if fecha_bog(c["b"]).date() == fecha_bog(c["a"]).date() else hbd(c["b"])
+    def _hora(c):
+        """Hora de inicio del corte; con fecha si no es del día del reporte."""
+        return (hb(c["a"]) if fecha_bog(c["a"]).date() == fin.date() else hbd(c["a"])) + ("≈" if c.get("estimado") else "")
     for R in orden_sys:
         s = R["sys"]; cc = sorted(R["cortes"], key=lambda c: c["a"])
         ultimo, previos = cc[-1], cc[-2::-1]       # previos: del más reciente al más antiguo
@@ -286,7 +289,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         vr_det = " · ".join(x for x in ("alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
         celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
         celdas_prev = "".join(
-            (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small></td>' if i < len(previos) else "<td></td>")
+            (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small><small>{_hora(previos[i])}</small></td>' if i < len(previos) else "<td></td>")
             for i in range(n_prev))
         soc_i = lambda x: "—" if x is None else f"{x:.0f}"
         celda_ult = (f'<td style="white-space:nowrap"><b>{hbd(ultimo["a"])}{"≈" if ultimo.get("estimado") else ""} → {_fin(ultimo)}</b>'
@@ -435,7 +438,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
     {sec_bat}
     {sec_det}
-    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo, y la hora y la duración salen al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
 </section>
 
