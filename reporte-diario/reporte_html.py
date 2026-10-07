@@ -729,25 +729,27 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 tip = f'{R["sys"]["casa"]} · {dec(R["sys"]["cap"], 2)} kWp · generó {dec(R["pv_tot"], 1)} kWh · yield {dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"} · {dec(100 * r_, 0) + " % del patrón" if r_ is not None else ""}'
                 s4.append(f'<circle class="yd {niv}" cx="{sx(R["sys"]["cap"]):.1f}" cy="{sy_(R["pv_tot"]):.1f}" r="5"><title>{esc(tip)}</title></circle>')
             grafico_dp = f'<div class="scroll"><svg viewBox="0 0 {SX0 + SW + 10} {SH + 52}" role="img" aria-label="Generación del día frente a la potencia instalada de cada casa" style="min-width:720px">{"".join(s4)}<text class="ax" x="{SX0 + SW / 2:.1f}" y="{SH + 46}" text-anchor="middle">potencia instalada (kWp)</text><text class="ax" x="12" y="{10 + SH / 2:.1f}" text-anchor="middle" transform="rotate(-90 12 {10 + SH / 2:.1f})">generación del día (kWh)</text></svg></div><div class="legend"><span><i class="dotl ok"></i>≥ 75 % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 %</span><span>las líneas son la generación esperada con el yield patrón de cada región (kWp × patrón ÷ 365)</span></div>'
-        # ---- ranking de casas por cobertura solar (generación ÷ consumo del cliente); exportada e importada en el tooltip
-        rk = sorted([R for R in RS if R.get("cob_sol") is not None], key=lambda R: -R["cob_sol"])
+        # ---- ranking de las casas por energía exportada a la red (energyAE del medidor de red, en la ventana del reporte)
+        rk = sorted([R for R in RS if R["exp"].get("total") is not None], key=lambda R: (-R["exp"]["total"], num_casa(R["sys"]["casa"])))
         grafico_rk = ""
         if rk:
             KX0, KW, KH = 116, 620, 17
-            mxk = max(120.0, max(R["cob_sol"] for R in rk) * 1.05)
+            mxk = max(R["exp"]["total"] for R in rk) or 0.01
+            fk, uk, dk = (1000, "Wh", 0) if mxk < 1 else (1, "kWh", 2)      # con exportaciones menores a 1 kWh se muestra en Wh para que se distingan
             kx = lambda v: KX0 + v / mxk * KW
             sk = []
-            for v in range(0, int(mxk) + 1, 20):
-                cls = "pat" if v == 100 else "grid"
-                sk.append(f'<line class="{cls}" x1="{kx(v):.1f}" y1="10" x2="{kx(v):.1f}" y2="{10 + len(rk) * KH}"/><text class="ax" x="{kx(v):.1f}" y="{10 + len(rk) * KH + 14}" text-anchor="middle">{v} %</text>')
+            for fr in (0, .25, .5, .75, 1.0):
+                sk.append(f'<line class="grid" x1="{kx(mxk * fr):.1f}" y1="10" x2="{kx(mxk * fr):.1f}" y2="{10 + len(rk) * KH}"/><text class="ax" x="{kx(mxk * fr):.1f}" y="{10 + len(rk) * KH + 14}" text-anchor="middle">{dec(mxk * fr * fk, dk)}</text>')
             for i, R in enumerate(rk):
                 yy = 10 + i * KH
-                exp_k = R["exp"].get("total"); imp_k = R["imp"].get("total")
-                tip = (f'#{i + 1} {R["sys"]["casa"]} · cobertura solar {dec(R["cob_sol"], 0)} % · generó {dec(R["pv_tot"], 1)} kWh · consumo del cliente {dec(R["cons_cli"], 1)} kWh'
-                       + (f' · exportada {dec(exp_k, 2)} kWh' if exp_k is not None else "") + (f' · importada {dec(imp_k, 1)} kWh' if imp_k is not None else ""))
-                w_k = max(R["cob_sol"] / mxk * KW, 2)
-                sk.append(f'<g class="dm"><title>{esc(tip)}</title><rect class="hit" x="0" y="{yy}" width="{KX0 + KW + 70}" height="{KH}"/><text class="sm" x="{KX0 - 8}" y="{yy + 12}" text-anchor="end">{i + 1}. {esc(R["sys"]["casa"])}</text><rect class="gb gen" x="{KX0}" y="{yy + 2}" width="{w_k:.1f}" height="{KH - 5}" rx="2"/><text class="soc-n" x="{KX0 + w_k + 6:.1f}" y="{yy + 12}">{dec(R["cob_sol"], 0)} %</text></g>')
-            grafico_rk = f'<div class="scroll"><svg viewBox="0 0 {KX0 + KW + 70} {10 + len(rk) * KH + 22}" role="img" aria-label="Ranking de las casas por cobertura solar" style="min-width:720px">{"".join(sk)}</svg></div><div class="legend"><span><i class="lg gen"></i>cobertura solar = generación ÷ consumo del cliente</span><span>línea continua: 100 % (la generación cubre todo el consumo)</span><span>pasa el cursor para ver generación, consumo, exportada e importada de cada casa</span></div>'
+                ex_k = R["exp"]["total"]; imp_k = R["imp"].get("total")
+                tip = (f'#{i + 1} {R["sys"]["casa"]} · exportada {dec(ex_k * fk, dk)} {uk} (' + dec(ex_k, 3) + ' kWh)' + (f' · importada {dec(imp_k, 1)} kWh' if imp_k is not None else "")
+                       + (f' · generó {dec(R["pv_tot"], 1)} kWh · exportó el {dec(100 * ex_k / R["pv_tot"], 1)} % de lo generado' if R.get("pv_tot") else ""))
+                w_k = max(ex_k / mxk * KW, 2) if ex_k > 0 else 0
+                barra = f'<rect class="gb gen" x="{KX0}" y="{yy + 2}" width="{w_k:.1f}" height="{KH - 5}" rx="2"/>' if w_k else ""
+                sk.append(f'<g class="dm"><title>{esc(tip)}</title><rect class="hit" x="0" y="{yy}" width="{KX0 + KW + 80}" height="{KH}"/><text class="sm" x="{KX0 - 8}" y="{yy + 12}" text-anchor="end">{i + 1}. {esc(R["sys"]["casa"])}</text>{barra}<text class="soc-n" x="{KX0 + w_k + 6:.1f}" y="{yy + 12}">{dec(ex_k * fk, dk)} {uk}</text></g>')
+            n_cero = sum(1 for R in rk if R["exp"]["total"] <= 0)
+            grafico_rk = f'<div class="scroll"><svg viewBox="0 0 {KX0 + KW + 80} {10 + len(rk) * KH + 22}" role="img" aria-label="Ranking de las casas por energía exportada a la red" style="min-width:720px">{"".join(sk)}</svg></div><div class="legend"><span><i class="lg gen"></i>energía activa exportada a la red en la ventana ({uk})</span><span>{_pl(n_cero, "casa", "casas")} con 0 {uk} exportados</span><span>pasa el cursor para ver importada, generación y % exportado de cada casa</span></div>'
         sec_vis = f'''<section>
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
@@ -762,7 +764,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {bloque_soc}
     <h3>Generación frente a consumo de los clientes</h3>
     {grafico_gc}
-    {('<h3>Ranking de las casas por cobertura solar</h3>' + grafico_rk) if grafico_rk else ''}
+    {('<h3>Ranking de las casas por energía exportada</h3>' + grafico_rk) if grafico_rk else ''}
     <h3>Yield frente al patrón de su región</h3>
     {grafico_y}
     {('<h3>Hora en que la batería llegó a carga completa</h3>' + grafico_ll) if grafico_ll else ''}
