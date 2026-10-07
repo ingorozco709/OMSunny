@@ -349,6 +349,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     sec_sis = tabla(sis_head, rows, 800 + 70 * n_prev) if rows else ""
     # casas que solo tienen baterías (sin FV): se reportan aparte
     sec_bat = ""
+    tit_bat = ""
     if RB:
         rows = []
         for R in RB:
@@ -370,7 +371,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     + ("solo tiene baterías instaladas" if uno else "solo tienen baterías instaladas")
                     + (": no cuenta" if uno else ": no cuentan") + " en generación, yield, cobertura ni exportación"
                     + ((", y no tuvo cortes de red" if uno else ", y no tuvieron cortes de red") if sin_cortes else "") + ".")
-        sec_bat = f'<h3>{"Casa solo con baterías (sin FV)" if uno else "Casas solo con baterías (sin FV)"}</h3>' + tabla(bat_head, rows, 900) + f'<p class="note">{esc(nota_bat)}</p>'
+        tit_bat = "Casa solo con baterías (sin FV)" if uno else "Casas solo con baterías (sin FV)"
+        sec_bat = tabla(bat_head, rows, 900) + f'<p class="note">{esc(nota_bat)}</p>'
     # detalle por corte
     def durante_txt(c):
         """Huecos de tensión a mitad del corte (ni al caer ni al volver la red): duración y hora de inicio de cada uno."""
@@ -442,7 +444,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             cd = [(R, c) for R in RS for c in R["cortes"] if d0 <= c["a"] < d1]
             sd = len(set(id(R) for R, c in cd))
             rows.append(f'<tr><td><b>{_dia(d0)}</b></td><td class="n">{len(cd)}</td><td class="n">{sd}</td><td class="n">{dec(pvd, 0)}</td><td class="n">{dec(exd, 0)}</td><td class="n">{dec(imd, 0)}</td></tr>')
-        sec_dia = '<section><h2>Por día</h2><div class="card">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.</p></div></section>'
+        sec_dia = '<section><details><summary>Por día</summary><div style="margin-top:10px">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.</p></div></details></section>'
 
     # ------------------------------------------------ panel gráfico: semáforo, línea de tiempo, baterías y yield
     sec_vis = ""
@@ -727,6 +729,25 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 tip = f'{R["sys"]["casa"]} · {dec(R["sys"]["cap"], 2)} kWp · generó {dec(R["pv_tot"], 1)} kWh · yield {dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"} · {dec(100 * r_, 0) + " % del patrón" if r_ is not None else ""}'
                 s4.append(f'<circle class="yd {niv}" cx="{sx(R["sys"]["cap"]):.1f}" cy="{sy_(R["pv_tot"]):.1f}" r="5"><title>{esc(tip)}</title></circle>')
             grafico_dp = f'<div class="scroll"><svg viewBox="0 0 {SX0 + SW + 10} {SH + 52}" role="img" aria-label="Generación del día frente a la potencia instalada de cada casa" style="min-width:720px">{"".join(s4)}<text class="ax" x="{SX0 + SW / 2:.1f}" y="{SH + 46}" text-anchor="middle">potencia instalada (kWp)</text><text class="ax" x="12" y="{10 + SH / 2:.1f}" text-anchor="middle" transform="rotate(-90 12 {10 + SH / 2:.1f})">generación del día (kWh)</text></svg></div><div class="legend"><span><i class="dotl ok"></i>≥ 75 % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 %</span><span>las líneas son la generación esperada con el yield patrón de cada región (kWp × patrón ÷ 365)</span></div>'
+        # ---- ranking de casas por cobertura solar (generación ÷ consumo del cliente); exportada e importada en el tooltip
+        rk = sorted([R for R in RS if R.get("cob_sol") is not None], key=lambda R: -R["cob_sol"])
+        grafico_rk = ""
+        if rk:
+            KX0, KW, KH = 116, 620, 17
+            mxk = max(120.0, max(R["cob_sol"] for R in rk) * 1.05)
+            kx = lambda v: KX0 + v / mxk * KW
+            sk = []
+            for v in range(0, int(mxk) + 1, 20):
+                cls = "pat" if v == 100 else "grid"
+                sk.append(f'<line class="{cls}" x1="{kx(v):.1f}" y1="10" x2="{kx(v):.1f}" y2="{10 + len(rk) * KH}"/><text class="ax" x="{kx(v):.1f}" y="{10 + len(rk) * KH + 14}" text-anchor="middle">{v} %</text>')
+            for i, R in enumerate(rk):
+                yy = 10 + i * KH
+                exp_k = R["exp"].get("total"); imp_k = R["imp"].get("total")
+                tip = (f'#{i + 1} {R["sys"]["casa"]} · cobertura solar {dec(R["cob_sol"], 0)} % · generó {dec(R["pv_tot"], 1)} kWh · consumo del cliente {dec(R["cons_cli"], 1)} kWh'
+                       + (f' · exportada {dec(exp_k, 2)} kWh' if exp_k is not None else "") + (f' · importada {dec(imp_k, 1)} kWh' if imp_k is not None else ""))
+                w_k = max(R["cob_sol"] / mxk * KW, 2)
+                sk.append(f'<g class="dm"><title>{esc(tip)}</title><rect class="hit" x="0" y="{yy}" width="{KX0 + KW + 70}" height="{KH}"/><text class="sm" x="{KX0 - 8}" y="{yy + 12}" text-anchor="end">{i + 1}. {esc(R["sys"]["casa"])}</text><rect class="gb gen" x="{KX0}" y="{yy + 2}" width="{w_k:.1f}" height="{KH - 5}" rx="2"/><text class="soc-n" x="{KX0 + w_k + 6:.1f}" y="{yy + 12}">{dec(R["cob_sol"], 0)} %</text></g>')
+            grafico_rk = f'<div class="scroll"><svg viewBox="0 0 {KX0 + KW + 70} {10 + len(rk) * KH + 22}" role="img" aria-label="Ranking de las casas por cobertura solar" style="min-width:720px">{"".join(sk)}</svg></div><div class="legend"><span><i class="lg gen"></i>cobertura solar = generación ÷ consumo del cliente</span><span>línea continua: 100 % (la generación cubre todo el consumo)</span><span>pasa el cursor para ver generación, consumo, exportada e importada de cada casa</span></div>'
         sec_vis = f'''<section>
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
@@ -741,9 +762,9 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {bloque_soc}
     <h3>Generación frente a consumo de los clientes</h3>
     {grafico_gc}
+    {('<h3>Ranking de las casas por cobertura solar</h3>' + grafico_rk) if grafico_rk else ''}
     <h3>Yield frente al patrón de su región</h3>
     {grafico_y}
-    {('<h3>Generación del día frente a la potencia instalada</h3>' + grafico_dp) if grafico_dp else ''}
     {('<h3>Hora en que la batería llegó a carga completa</h3>' + grafico_ll) if grafico_ll else ''}
   </div>
 </section>'''
@@ -780,8 +801,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 </section>
 
 <section>
-  <h2>Por ciudad</h2>
-  <div class="card">{sec_ciu}</div>
+  <details><summary>Por ciudad</summary><div style="margin-top:10px">{sec_ciu}</div></details>
 </section>
 
 {sec_dia}
@@ -789,34 +809,30 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <section>
   <h2>Interrupciones y respaldo</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:14px">
-    <h3>Eventos de red</h3>
-    {sec_ev}
-    {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
-    {sec_bat}
+    <details><summary>Eventos de red</summary><div style="margin-top:10px">{sec_ev}</div></details>
+    {('<details><summary>Por sistema</summary><div style="margin-top:10px">' + sec_sis + '</div></details>') if sec_sis else ''}
+    {('<details><summary>' + tit_bat + '</summary><div style="margin-top:10px">' + sec_bat + '</div></details>') if sec_bat else ''}
     {sec_det}
     <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
 </section>
 
 <section>
-  <h2>Rendimiento de los sistemas</h2>
-  <div class="card">
+  <details><summary>Rendimiento de los sistemas</summary><div style="margin-top:10px">
     {sec_pv}
     <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos. Se añade «producción limitada» cuando la batería llegó a {BATERIA_LLENA_SOC} % antes de las {LLENO_ANTES_H}:00, y «producción limitada en la tarde» cuando llegó entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00, porque entonces solo se limita parte de la tarde (se indica la hora): en sistemas sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa, así que el yield mide la energía solar consumida y no la que el sistema podría producir.</p>
-  </div>
+  </div></details>
 </section>
 
 <section>
-  <h2>Exportación de energía activa</h2>
-  <div class="card">
+  <details><summary>Exportación de energía activa</summary><div style="margin-top:10px">
     {sec_ex}
     <p class="note" style="margin-top:10px">Exportada e importada, del medidor de red (<code>energyAE</code> y <code>energyAI</code>). Consumo del cliente = demanda del día calendario en el medidor solar; cobertura solar = generación / consumo del cliente. La generación es el balance de medidores, así que incluye pérdidas y la energía que pasa por la batería. Cada encabezado indica el periodo de su dato: las columnas por día suman la ventana completa (exportada, importada y consumo del lado respaldado, que se miden entre la hora de inicio y la de corte del reporte), mientras que consumo del cliente, generación y cobertura son de días completos, de 00:00 a 24:00, porque dependen de los cierres diarios de los medidores.</p>
-  </div>
+  </div></details>
 </section>
 
 <section>
-  <h2>Comunicación y equipos</h2>
-  <div class="card">{sec_com}</div>
+  <details><summary>Comunicación y equipos</summary><div style="margin-top:10px">{sec_com}</div></details>
 </section>
 
 <section>
