@@ -431,8 +431,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 </div>
 
 <section>
-  <h2>Puntos más relevantes</h2>
-  <div class="card"><ul class="pts">{li}</ul></div>
+  <details><summary>Puntos más relevantes ({len(P)})</summary><div style="margin-top:10px"><ul class="pts">{li}</ul></div></details>
 </section>
 
 <section>

@@ -475,3 +475,11 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario ("agrégalo"):** en "Detalle por corte" se agrega la columna **Hueco durante**, con la duración y la hora de inicio de cada hueco de tensión que ocurre a mitad del corte (ni al caer ni al volver la red). Antes ese tiempo solo estaba en "Total que vio la casa" y la fila parecía inconsistente (ej. Casa 2, 6 oct: corte 09:29–12:10, hueco al caer —, al volver —, total 32 s; el hueco fue de 11:35:10 a 11:35:42).
 
 **Dónde está el código:** `durante_txt` y `det_head` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — "Puntos más relevantes" desplegable
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "Puntos más relevantes" se muestra como un desplegable, igual que "Detalle por corte" (cerrado por defecto, con el número de puntos en el título). El resumen de las viñetas en la respuesta de la rutina no cambia.
+
+**Dónde está el código:** bloque "Puntos más relevantes" de `reporte-diario/reporte_html.py`.
