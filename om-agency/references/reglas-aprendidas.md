@@ -526,3 +526,11 @@ Reportes Operativos Periódicos.
 **Precisión de los porcentajes:** en los gráficos, un respaldo entre 97 % y 100 % se muestra con un decimal (98,7 %), para que un valor en ámbar (< 99 %) nunca aparezca como «99».
 
 **Dónde está el código:** `tarj_c_int`, `grafico_ev` (dentro del bloque `VISUAL`) y `vis_int` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Hora del corte en el título de baterías y ranking de exportación en kWh
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucciones del usuario:** (1) el título de la gráfica "Baterías por debajo de 50 % al corte del reporte" lleva la fecha y hora del corte (ej. "7 oct 07:00") para que se sepa a qué hora se hace el corte; la "hora a la que haces el reporte" que pidió se refería a esa hora de corte, no a la de generación. (2) El ranking de las casas por energía exportada va siempre en **kWh** con 2 decimales (no en Wh: generaba mucho ruido); el tooltip trae 3 decimales.
+
+**Dónde está el código:** título de baterías y `grafico_rk` en `reporte-diario/reporte_html.py`.

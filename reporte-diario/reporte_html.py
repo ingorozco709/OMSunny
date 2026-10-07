@@ -737,7 +737,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         if rk:
             KX0, KW, KH = 116, 620, 17
             mxk = max(R["exp"]["total"] for R in rk) or 0.01
-            fk, uk, dk = (1000, "Wh", 0) if mxk < 1 else (1, "kWh", 2)      # con exportaciones menores a 1 kWh se muestra en Wh para que se distingan
+            fk, uk, dk = 1, "kWh", 2      # siempre en kWh (decisión del usuario: en Wh generaba mucho ruido)
             kx = lambda v: KX0 + v / mxk * KW
             sk = []
             for fr in (0, .25, .5, .75, 1.0):
@@ -823,7 +823,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
     {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
-    <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
+    <h3>Baterías por debajo de 50 % al corte del reporte, {hbd(W1)} ({n_res} en reserva)</h3>
     {bloque_soc}
     <h3>Generación frente a consumo de los clientes</h3>
     {grafico_gc}
@@ -938,7 +938,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
     {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
-    <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
+    <h3>Baterías por debajo de 50 % al corte del reporte, {hbd(W1)} ({n_res} en reserva)</h3>
     {bloque_soc}
   </div>
 </section>''' if VISUAL else ""
