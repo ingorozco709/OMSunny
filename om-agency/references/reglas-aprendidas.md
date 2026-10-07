@@ -449,3 +449,13 @@ Reportes Operativos Periódicos.
 **Qué cambia (constante `RESERVA` en `reporte-diario/reporte_diario.py`):** el punto "Baterías" (sistemas que llegaron a la reserva durante un corte), el punto "Baterías en reserva" (último SOC de 20 % o menos) y el texto de "Límites del análisis". Como la batería "cargada" del veredicto "Retardo de transferencia" se define como SOC al inicio del corte mayor a la reserva, ese umbral también pasa a 20 %. Las entradas anteriores de este archivo que citan el 22 % son históricas y quedan reemplazadas por esta.
 
 **Efecto con los datos del 6-oct (17:41):** "Baterías en reserva" incluye la Casa 99 (20 %) además de 102p (15 %), 121 CR (19 %), 415p (19 %) y 447p (12 %); los veredictos de respaldo no cambiaron.
+
+## 2026-10-07 — El veredicto de respaldo incluye el tiempo que el cliente vio en el último corte
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** en la columna "Veredicto de respaldo (último corte)" de la tabla "Por sistema", se incluye el **tiempo que el cliente vio en el último corte** y se repite en todos los reportes.
+
+**Cómo se aplicó:** debajo de la etiqueta del veredicto, la primera línea es "tiempo que vio la casa: X" (suma de los huecos de tensión del medidor solar asociados a ese corte, la misma cifra de su % de respaldo) o "0 s, sin hueco"; luego van "alimenta" y la causa o el retardo de transferencia, como antes.
+
+**Dónde está el código:** `vio` y `vr_det` en `reporte-diario/reporte_html.py`.

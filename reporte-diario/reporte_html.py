@@ -292,7 +292,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         cpeor = ultimo                      # el veredicto y su detalle son los del último corte, el mismo de la columna "Último corte"
         vr = cpeor.get("veredicto") or ""
         niv = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Retardo de transferencia": "warn", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}.get(vr, "off")
-        vr_det = " · ".join(x for x in ("alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
+        vio = ("tiempo que vio la casa: " + (fmt(cpeor["perc"]) if cpeor.get("perc") else "0 s, sin hueco")) if cpeor.get("perc") is not None else ""
+        vr_det = " · ".join(x for x in (vio, "alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
         celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
         celdas_prev = "".join(
             (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small><small>{_hora(previos[i])}</small></td>' if i < len(previos) else "<td></td>")
