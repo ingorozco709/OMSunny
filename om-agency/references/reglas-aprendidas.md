@@ -467,3 +467,11 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** en las columnas "Anterior 1…4" de la tabla "Por sistema", además del % de respaldo y la hora, se muestran el **tiempo que se fue la red** (duración del corte) y el **tiempo que el cliente vio la interrupción** (suma de huecos de tensión del medidor solar). Sustituye la regla de que la duración solo salía al pasar el cursor.
 
 **Dónde está el código:** `celdas_prev` y el encabezado "Anterior N" en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Detalle por corte: columna "Hueco durante"
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario ("agrégalo"):** en "Detalle por corte" se agrega la columna **Hueco durante**, con la duración y la hora de inicio de cada hueco de tensión que ocurre a mitad del corte (ni al caer ni al volver la red). Antes ese tiempo solo estaba en "Total que vio la casa" y la fila parecía inconsistente (ej. Casa 2, 6 oct: corte 09:29–12:10, hueco al caer —, al volver —, total 32 s; el hueco fue de 11:35:10 a 11:35:42).
+
+**Dónde está el código:** `durante_txt` y `det_head` en `reporte-diario/reporte_html.py`.
