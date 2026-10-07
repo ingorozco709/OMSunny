@@ -34,7 +34,7 @@ python3 reporte-diario/reporte_diario.py                       # ventana automá
 python3 reporte-diario/reporte_diario.py --fin 2026-10-05T07:00 --inicio 2026-10-02T07:00
 python3 reporte-diario/reporte_diario.py --solo-interrupciones            # reporte exclusivo de interrupciones: desde las 00:00 de hoy hasta ahora
 ```
-Con `--solo-interrupciones` la ventana va de las 00:00 del día de `--fin` (o de hoy) a la hora de corte y la página trae solo lo relacionado con los cortes de red: puntos relevantes de interrupciones, resumen por ciudad, eventos de red, "Por sistema" (último corte y veredicto), casas solo con baterías, detalle por corte y límites; sin rendimiento, exportación ni comunicación. Publicar como Artifact aparte del reporte diario.
+Con `--solo-interrupciones` la ventana va de las 00:00 del día de `--fin` (o de hoy) a la hora de corte y la página trae solo lo relacionado con los cortes de red. Arriba, una "Vista rápida" gráfica: semáforo del respaldo, tarjetas por ciudad (cortes, eventos, evento más largo, respaldo mediano, baterías en reserva), línea de tiempo de los eventos de red del día (una barra por evento, coloreada por el peor respaldo), línea de tiempo de cortes por casa con rejilla horaria, mapa de calor de respaldo por evento, cuánto vio la casa en cada corte y baterías durante el corte más largo. Debajo, en desplegables cerrados: puntos relevantes, eventos de red, "Por sistema" (último corte y veredicto), casas solo con baterías y detalle por corte, y los límites; sin rendimiento, exportación ni comunicación. Publicar como Artifact aparte del reporte diario.
 
 Salida: `reporte_diario.html` (fragmento listo para publicar como Artifact) y `resumen_diario.json` (cifras y puntos relevantes).
 

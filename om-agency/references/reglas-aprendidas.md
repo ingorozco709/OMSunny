@@ -506,3 +506,15 @@ Reportes Operativos Periódicos.
 - Cada instrucción nueva del usuario se ejecuta solo cuando lo autoriza ("no las ejecutes hasta que te dé la instrucción").
 
 **Dónde está el código:** bloque `VISUAL`/`sec_vis` y plantilla final de `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Reporte de interrupciones del día en versión gráfica
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "vuélvelo más gráfico" (sobre el reporte exclusivo de interrupciones del día).
+
+**Cómo se aplicó:** `--solo-interrupciones` reutiliza los gráficos de la "Vista rápida" del reporte diario que tratan de cortes (semáforo, línea de tiempo por casa, mapa de calor por evento, cuánto vio la casa, batería durante el corte más largo, baterías bajo 50 %) y agrega dos propios: tarjetas por ciudad centradas en interrupciones y una línea de tiempo de eventos de red (una fila por evento, barra coloreada por el respaldo de la peor casa y, a la derecha, casas afectadas, duración típica y peor respaldo). La rejilla horaria de la línea de tiempo por casa es de 1 h cuando la ventana es de 18 h o menos. Las tablas pasan a desplegables cerrados. No se incluyen gráficas que el usuario ya descartó en el reporte diario (cortes por hora del día, curvas de SOC, dispersión generación frente a kWp).
+
+**Precisión de los porcentajes:** en los gráficos, un respaldo entre 97 % y 100 % se muestra con un decimal (98,7 %), para que un valor en ámbar (< 99 %) nunca aparezca como «99».
+
+**Dónde está el código:** `tarj_c_int`, `grafico_ev` (dentro del bloque `VISUAL`) y `vis_int` en `reporte-diario/reporte_html.py`.
