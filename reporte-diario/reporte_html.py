@@ -16,7 +16,27 @@ details{border:1px solid var(--line);border-radius:6px;padding:10px 14px;backgro
 details summary{cursor:pointer;font-weight:600}
 table.dt th{font-size:9.5px;letter-spacing:0;line-height:1.5;padding:10px 8px 8px;min-width:70px;white-space:nowrap}
 table.dt th:first-child{min-width:120px}
+.sema{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.sm-card{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sm-card.g{border-left-color:var(--good)} .sm-card.w{border-left-color:var(--warn)} .sm-card.c{border-left-color:var(--crit)}
+.sm-card .t{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13.5px}
+.sm-card .ic{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:700;color:#fff;background:var(--muted)}
+.sm-card.g .ic{background:var(--good)} .sm-card.w .ic{background:var(--warn);color:#2a1d00} .sm-card.c .ic{background:var(--crit)}
+.sm-card .v{font-family:var(--f-d);font-size:36px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.sm-card small{color:var(--muted);font-size:11.5px;font-family:var(--f-m);white-space:normal}
+svg rect.tl.g{fill:var(--good)} svg rect.tl.g.lite{fill:var(--good);opacity:.55} svg rect.tl.w{fill:var(--warn)} svg rect.tl.c{fill:var(--crit)}
+svg rect.tl{stroke:var(--surface);stroke-width:1} svg rect.tl:hover{stroke:var(--ink);stroke-width:1.5}
+svg .pat{stroke:var(--ink2);stroke-width:1.6} svg .lim{stroke:var(--warn);stroke-width:1.6;stroke-dasharray:5 4}
+svg circle.yd{stroke:var(--surface);stroke-width:2} svg circle.yd.ok{fill:var(--accent)} svg circle.yd.w{fill:var(--warn)} svg circle.yd:hover{stroke:var(--ink)}
+.legend i.lg{width:14px;height:10px;border-radius:2px;display:inline-block} .legend i.lg.g{background:var(--good)} .legend i.lg.g.lite{opacity:.55} .legend i.lg.w{background:var(--warn)} .legend i.lg.c{background:var(--crit)}
+.legend i.dotl{width:10px;height:10px;border-radius:50%;display:inline-block} .legend i.dotl.ok{background:var(--accent)} .legend i.dotl.w{background:var(--warn)}
+.soc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 22px}
+.soc-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.soc-row .sn{width:74px;flex:none;white-space:nowrap}
+.soc-row .soc{flex:1;min-width:0}
 """
+
+VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
 
 def _kwh(x, n=1):
@@ -400,8 +420,97 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             rows.append(f'<tr><td><b>{_dia(d0)}</b></td><td class="n">{len(cd)}</td><td class="n">{sd}</td><td class="n">{dec(pvd, 0)}</td><td class="n">{dec(exd, 0)}</td><td class="n">{dec(imd, 0)}</td></tr>')
         sec_dia = '<section><h2>Por día</h2><div class="card">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.</p></div></section>'
 
+    # ------------------------------------------------ panel gráfico: semáforo, línea de tiempo, baterías y yield
+    sec_vis = ""
+    if VISUAL:
+        _niv = {"Respaldo total": "g", "Respaldo total con transferencia": "g", "Retardo de transferencia": "w", "Caída durante el respaldo": "c", "Sin respaldo": "c"}
+        _ico = {"g": "✓", "w": "▲", "c": "✕"}
+        _orden_v = ["Respaldo total", "Respaldo total con transferencia", "Retardo de transferencia", "Caída durante el respaldo", "Sin respaldo"]
+        _cs = [R for R in RS if R["cortes"]]
+        _ult = {R["sys"]["casa"]: max(R["cortes"], key=lambda c: c["a"]) for R in _cs}
+        _por_v = {v: sorted([k for k, c in _ult.items() if c.get("veredicto") == v], key=num_casa) for v in _orden_v}
+        tarjetas = ""
+        for v in _orden_v:
+            casas = _por_v[v]
+            niv = _niv[v]
+            lista = ", ".join(casas) if casas and len(casas) <= 12 else (f"{len(casas)} casas (ver tabla)" if casas else "ninguna")
+            tarjetas += f'<div class="sm-card {niv}"><div class="t"><span class="ic" aria-hidden="true">{_ico[niv]}</span>{esc(v)}</div><div class="v">{len(casas)}</div><small>{esc(lista)}</small></div>'
+        # línea de tiempo por casa: una barra por corte, coloreada según su veredicto
+        X0, PW, RH = 96, 880, 17
+        filas = sorted(_cs, key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
+        span = max(1, W1 - W0)
+        xt = lambda t: X0 + (min(max(t, W0), W1) - W0) / span * PW
+        svg = []
+        y = 26
+        h_svg = 26 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
+        # rejilla de horas cada 3 h (referida a la hora local de Bogotá)
+        t_h = W0 - (W0 + 5 * 3600000) % (3 * 3600000) + 3 * 3600000
+        while t_h < W1:
+            x = xt(t_h)
+            svg.append(f'<line class="grid" x1="{x:.1f}" y1="16" x2="{x:.1f}" y2="{h_svg - 20}"/><text class="ax" x="{x:.1f}" y="11" text-anchor="middle">{hb(t_h)}</text>')
+            t_h += 3 * 3600000
+        ciu_ant = None
+        for R in filas:
+            s = R["sys"]
+            if s["ciudad"] != ciu_ant:
+                ciu_ant = s["ciudad"]
+                svg.append(f'<text class="lbl" x="4" y="{y + 11}">{esc(ciu_ant.title())}</text>')
+                y += 18
+            svg.append(f'<text class="sm" x="{X0 - 8}" y="{y + 11}" text-anchor="end">{esc(s["casa"])}</text><line class="lane" x1="{X0}" y1="{y + RH - 1}" x2="{X0 + PW}" y2="{y + RH - 1}"/>')
+            for c in R["cortes"]:
+                b = c["b"] if c["b"] is not None else W1
+                if b < W0 or c["a"] > W1:
+                    continue
+                x1, x2 = xt(c["a"]), xt(b)
+                w = max(4.0, x2 - x1)
+                niv = _niv.get(c.get("veredicto"), "g")
+                tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {c.get("veredicto") or ""}'
+                svg.append(f'<rect class="tl {niv}{" lite" if c.get("veredicto") == "Respaldo total con transferencia" else ""}" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"><title>{esc(tip)}</title></rect>')
+            y += RH
+        linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 8} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
+        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Respaldo total</span><span><i class="lg g lite"></i>✓ Con transferencia</span><span><i class="lg w"></i>▲ Retardo de transferencia</span><span><i class="lg c"></i>✕ Caída o sin respaldo</span></div>'
+        # baterías: SOC actual de los sistemas por debajo de 50 %, con la reserva marcada
+        TODOS_V = list(RS) + list(RB)
+        socs = sorted(((R["sys"]["casa"], R["soc_ult"][1]) for R in TODOS_V if R["soc_ult"]), key=lambda x: x[1])
+        bajos = [(k, v) for k, v in socs if v <= 50]
+        filas_s = "".join(
+            f'<div class="soc-row"><span class="sn">{esc(k)}</span><div class="soc"><div class="track"><i class="{"crit" if v <= RESERVA else "warn"}" style="width:{max(v, 1):.0f}%"></i><b style="left:{RESERVA:.0f}%" title="reserva {RESERVA:.0f} %"></b></div><span class="num">{v:.0f} %</span></div></div>'
+            for k, v in bajos)
+        n_res = sum(1 for k, v in socs if v <= RESERVA)
+        bloque_soc = f'<div class="soc-grid">{filas_s}</div><div class="legend"><span><i class="lg c"></i>en reserva (≤ {RESERVA:.0f} %)</span><span><i class="lg w"></i>entre {RESERVA:.0f} y 50 %</span><span>la marca vertical es la reserva</span><span>{len(socs) - len(bajos)} sistemas por encima de 50 % no se dibujan</span></div>' if bajos else "<p class=\"note\">Todos los sistemas tienen más de 50 % de batería.</p>"
+        # yield frente al patrón de su región
+        pts = [(R, R["ratio"]) for R in RS if R.get("ratio") is not None]
+        lan = [c for c in ciudades if any(R["sys"]["ciudad"] == c for R, _ in pts)]
+        XY0, PY, LH = 96, 840, 40
+        sy = []
+        escx = lambda r: XY0 + min(max(r, 0), 1.6) / 1.6 * PY
+        for tick in (0, .25, .5, .75, 1.0, 1.25, 1.5):
+            x = escx(tick)
+            cls = "pat" if tick == 1.0 else ("lim" if tick == .75 else "grid")
+            sy.append(f'<line class="{cls}" x1="{x:.1f}" y1="14" x2="{x:.1f}" y2="{14 + len(lan) * LH}"/><text class="ax" x="{x:.1f}" y="{14 + len(lan) * LH + 14}" text-anchor="middle">{tick * 100:.0f} %</text>')
+        for i, c in enumerate(lan):
+            yy = 14 + i * LH
+            sy.append(f'<text class="lbl" x="4" y="{yy + 24}">{esc(c.title())}</text><line class="lane" x1="{XY0}" y1="{yy + LH}" x2="{XY0 + PY}" y2="{yy + LH}"/>')
+            grp = sorted([(R, r) for R, r in pts if R["sys"]["ciudad"] == c], key=lambda x: x[1])
+            for j, (R, r) in enumerate(grp):
+                niv = "w" if r < 0.75 else "ok"
+                tip = f'{R["sys"]["casa"]} · yield {dec(R["sy_anual"], 0)} kWh/kWp·año · {dec(100 * r, 0)} % del patrón' + (f' · {R["flag"][1]}' if R["flag"] else "")
+                sy.append(f'<circle class="yd {niv}" cx="{escx(r):.1f}" cy="{yy + 14 + (j % 3) * 8}" r="5"><title>{esc(tip)}</title></circle>')
+        n_baj = sum(1 for _, r in pts if r < 0.75)
+        grafico_y = f'<div class="scroll"><svg viewBox="0 0 {XY0 + PY + 20} {14 + len(lan) * LH + 22}" role="img" aria-label="Yield proyectado de cada casa frente al patrón de su región" style="min-width:720px">{"".join(sy)}</svg></div><div class="legend"><span><i class="dotl ok"></i>≥ 75 % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 % ({n_baj} sistemas)</span><span>línea continua: 100 % del patrón de su región · punteada: 75 %</span></div>'
+        sec_vis = f'''<section>
+  <h2>Vista rápida</h2>
+  <div class="card" style="display:flex;flex-direction:column;gap:18px">
+    {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
+    {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte; pasa el cursor para ver cuánto duró, cuánto lo vio la casa y su % de respaldo. Los cortes de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
+    <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
+    {bloque_soc}
+    <h3>Yield frente al patrón de su región</h3>
+    {grafico_y}
+  </div>
+</section>'''
     lim_bat = (" Las casas que solo tienen baterías instaladas (" + ", ".join(R["sys"]["casa"] for R in RB) + ") se muestran en su propia tabla y no cuentan en generación, yield, cobertura ni exportación.") if RB else ""
-    estado_cls = "warn" if en_curso else ("ok" if True else "")
+    estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
     gen = fecha_bog(int(time.time() * 1000))
     pagina = f'''<title>{esc(titulo)}</title>
@@ -425,6 +534,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   {k_cob}
   {k_exp}
 </div>
+
+{sec_vis}
 
 <section>
   <h2>Puntos más relevantes</h2>
