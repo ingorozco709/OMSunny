@@ -506,3 +506,11 @@ Reportes Operativos Periódicos.
 - Cada instrucción nueva del usuario se ejecuta solo cuando lo autoriza ("no las ejecutes hasta que te dé la instrucción").
 
 **Dónde está el código:** bloque `VISUAL`/`sec_vis` y plantilla final de `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — La hora de generación va en el título
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** el título del reporte diario incluye la hora (Bogotá) a la que se genera el reporte: `<title>` "Operación diaria 7 oct · 15:58" y el encabezado "Operación de las últimas 24 horas · generado 15:58". Es la hora de generación, no la de corte de la ventana (07:00).
+
+**Dónde está el código:** `pagina` y `h1 .gh` en `reporte-diario/reporte_html.py`.

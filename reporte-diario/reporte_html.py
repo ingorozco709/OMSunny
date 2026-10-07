@@ -16,6 +16,7 @@ details{border:1px solid var(--line);border-radius:6px;padding:10px 14px;backgro
 details summary{cursor:pointer;font-weight:600}
 table.dt th{font-size:9.5px;letter-spacing:0;line-height:1.5;padding:10px 8px 8px;min-width:70px;white-space:nowrap}
 table.dt th:first-child{min-width:120px}
+h1 .gh{font-size:.42em;font-weight:500;color:var(--muted);white-space:nowrap}
 .sema{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .sm-card{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0;display:flex;flex-direction:column;gap:2px}
 .sm-card.g{border-left-color:var(--good)} .sm-card.w{border-left-color:var(--warn)} .sm-card.c{border-left-color:var(--crit)}
@@ -774,7 +775,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
     gen = fecha_bog(int(time.time() * 1000))
-    pagina = f'''<title>{esc(titulo)}</title>
+    pagina = f'''<title>{esc(titulo)} · {gen.strftime('%H:%M')}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 {css}
@@ -782,7 +783,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <div class="wrap">
 <header>
   <div class="kick">{'Fin de semana' if es_lunes else 'Últimas 24 horas'} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
-  <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'}</h1>
+  <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'} <span class="gh">· generado {gen.strftime('%H:%M')}</span></h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>{horas:.0f} h de operación</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
 </header>
