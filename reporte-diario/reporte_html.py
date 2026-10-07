@@ -25,6 +25,7 @@ table.dt th:first-child{min-width:120px}
 .sm-card .v{font-family:var(--f-d);font-size:36px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
 .sm-card small{color:var(--muted);font-size:11.5px;font-family:var(--f-m);white-space:normal}
 svg rect.tl.g{fill:var(--good)} svg rect.tl.g.lite{fill:var(--good);opacity:.55} svg rect.tl.w{fill:var(--warn)} svg rect.tl.c{fill:var(--crit)}
+svg text.soc-t{font-family:var(--f-m);font-size:9.5px;font-weight:600;fill:#fff;pointer-events:none}
 svg rect.tl{stroke:var(--surface);stroke-width:1} svg rect.tl:hover{stroke:var(--ink);stroke-width:1.5}
 svg .pat{stroke:var(--ink2);stroke-width:1.6} svg .lim{stroke:var(--warn);stroke-width:1.6;stroke-dasharray:5 4}
 svg circle.yd{stroke:var(--surface);stroke-width:2} svg circle.yd.ok{fill:var(--accent)} svg circle.yd.w{fill:var(--warn)} svg circle.yd:hover{stroke:var(--ink)}
@@ -471,7 +472,17 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     continue
                 x1, x2 = xt(c["a"]), xt(b)
                 w = max(4.0, x2 - x1)
-                tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {c.get("veredicto") or ""}'
+                # SOC al inicio del corte; si no hay dato, el último dato registrado de la casa (se marca con «último dato»)
+                soc_i, soc_nota = c.get("soc0"), ""
+                if soc_i is None:
+                    prev_s = [(t_, v_) for t_, v_ in (R.get("soc") or []) if v_ is not None and t_ <= c["a"]]
+                    if prev_s:
+                        soc_i, soc_nota = prev_s[-1][1], f" (último dato registrado, {hb(prev_s[-1][0])})"
+                    elif R.get("soc_ult"):
+                        soc_i, soc_nota = R["soc_ult"][1], f" (último dato registrado, {hb(R['soc_ult'][0])})"
+                soc_txt_c = f'SOC al inicio {soc_i:.0f} %{soc_nota}' if soc_i is not None else "SOC sin dato"
+                tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {soc_txt_c} · {c.get("veredicto") or ""}'
+                etiqueta = f'<text class="soc-t" x="{x1 + 4:.1f}" y="{y + 12}">SOC {soc_i:.0f}%{"*" if soc_nota else ""}</text>' if (soc_i is not None and (c["dur"] or 0) >= 300 and w >= 52) else ""
                 # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
                 rojos = ""
                 for h in c.get("hu") or []:
@@ -480,10 +491,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                         continue
                     hx1, hx2 = xt(h["a"]), xt(hu_fin)
                     rojos += f'<rect class="tl c" x="{hx1:.1f}" y="{y + 2}" width="{max(2.0, hx2 - hx1):.1f}" height="{RH - 5}"/>'
-                svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}</g>')
+                svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}{etiqueta}</g>')
             y += RH
         linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 8} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
-        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span></div>'
+        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span><span>SOC = carga de la batería al inicio del corte (cortes de 5 min o más; * = último dato registrado)</span></div>'
         # baterías: SOC actual de los sistemas por debajo de 50 %, con la reserva marcada
         TODOS_V = list(RS) + list(RB)
         socs = sorted(((R["sys"]["casa"], R["soc_ult"][1]) for R in TODOS_V if R["soc_ult"]), key=lambda x: x[1])
