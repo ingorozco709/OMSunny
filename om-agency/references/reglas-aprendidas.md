@@ -534,3 +534,11 @@ Reportes Operativos Periódicos.
 **Instrucciones del usuario:** (1) el título de la gráfica "Baterías por debajo de 50 % al corte del reporte" lleva la fecha y hora del corte (ej. "7 oct 07:00") para que se sepa a qué hora se hace el corte; la "hora a la que haces el reporte" que pidió se refería a esa hora de corte, no a la de generación. (2) El ranking de las casas por energía exportada va siempre en **kWh** con 2 decimales (no en Wh: generaba mucho ruido); el tooltip trae 3 decimales.
 
 **Dónde está el código:** título de baterías y `grafico_rk` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Ranking de exportación: eje fijo en 5 kWh, dinámico solo si algo lo supera
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** el eje horizontal del ranking de las casas por energía exportada se fija en **5 kWh** (marcas cada 1 kWh). Solo cuando una casa exporta más de 5 kWh el eje se vuelve dinámico: se ajusta al mayor valor, con marcas en pasos redondos (2, 5, 10, 50 kWh…).
+
+**Dónde está el código:** `max_ex`, `paso_k` y `mxk` en `grafico_rk` de `reporte-diario/reporte_html.py`.

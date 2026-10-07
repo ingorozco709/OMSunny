@@ -736,12 +736,21 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         grafico_rk = ""
         if rk:
             KX0, KW, KH = 116, 620, 17
-            mxk = max(R["exp"]["total"] for R in rk) or 0.01
             fk, uk, dk = 1, "kWh", 2      # siempre en kWh (decisión del usuario: en Wh generaba mucho ruido)
+            # eje fijo en 5 kWh; si alguna casa exporta más de 5 kWh, el eje se ajusta (múltiplo de un paso "redondo")
+            max_ex = max(R["exp"]["total"] for R in rk)
+            paso_k = 1.0
+            if max_ex > 5:
+                import math as _m
+                crudo = max_ex / 5
+                mag = 10 ** _m.floor(_m.log10(crudo))
+                paso_k = next(m_ * mag for m_ in (1, 2, 5, 10) if m_ * mag >= crudo)
+            mxk = 5.0 if max_ex <= 5 else paso_k * _m.ceil(max_ex / paso_k)
             kx = lambda v: KX0 + v / mxk * KW
             sk = []
-            for fr in (0, .25, .5, .75, 1.0):
-                sk.append(f'<line class="grid" x1="{kx(mxk * fr):.1f}" y1="10" x2="{kx(mxk * fr):.1f}" y2="{10 + len(rk) * KH}"/><text class="ax" x="{kx(mxk * fr):.1f}" y="{10 + len(rk) * KH + 14}" text-anchor="middle">{dec(mxk * fr * fk, dk)}</text>')
+            for n_t in range(0, int(round(mxk / paso_k)) + 1):
+                v_t = n_t * paso_k
+                sk.append(f'<line class="grid" x1="{kx(v_t):.1f}" y1="10" x2="{kx(v_t):.1f}" y2="{10 + len(rk) * KH}"/><text class="ax" x="{kx(v_t):.1f}" y="{10 + len(rk) * KH + 14}" text-anchor="middle">{dec(v_t, 0)}{" kWh" if n_t == int(round(mxk / paso_k)) else ""}</text>')
             for i, R in enumerate(rk):
                 yy = 10 + i * KH
                 ex_k = R["exp"]["total"]; imp_k = R["imp"].get("total")
