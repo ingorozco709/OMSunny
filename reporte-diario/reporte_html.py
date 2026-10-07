@@ -296,7 +296,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         vr_det = " · ".join(x for x in (vio, "alimenta: " + cpeor["fuente"] if cpeor.get("fuente") else "", cpeor.get("causa") or "") if x)
         celda_resp = _pill(niv, vr) + (f"<small>{esc(vr_det)}</small>" if vr_det else "") + ("<small>provisional: el corte sigue abierto</small>" if cpeor.get("abierto") else "")
         celdas_prev = "".join(
-            (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small><small>{_hora(previos[i])}</small></td>' if i < len(previos) else "<td></td>")
+            (f'<td class="n"><small title="{esc(hbd(previos[i]["a"]) + ("≈" if previos[i].get("estimado") else "") + " · " + fmt(previos[i]["dur"] or 0))}">{_pct(previos[i])}</small><small>{_hora(previos[i])}</small><small>sin red: {fmt(previos[i]["dur"] or 0)}</small><small>vio: {fmt(previos[i]["perc"]) if previos[i].get("perc") else "0 s"}</small></td>' if i < len(previos) else "<td></td>")
             for i in range(n_prev))
         soc_i = lambda x: "—" if x is None else f"{x:.0f}"
         celda_ult = (f'<td style="white-space:nowrap"><b>{hbd(ultimo["a"])}{"≈" if ultimo.get("estimado") else ""} → {_fin(ultimo)}</b>'
@@ -304,7 +304,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}{f"<small>{ocultos} más en el detalle</small>" if ocultos else ""}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(perc) if perc else "—"}</td>{celda_ult}{celdas_prev}<td>{estado}</td><td>{celda_resp}</td></tr>')
     sis_head = ('<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Tiempo que<br>vio la casa</th>'
                 + '<th>Último corte<br>inicio → fin · duración<br>SOC inicio → fin · respaldo</th>'
-                + "".join(f'<th class="n">Anterior {i + 1}<br>% respaldo</th>' for i in range(n_prev))
+                + "".join(f'<th class="n">Anterior {i + 1}<br>% respaldo<br>hora · sin red · vio</th>' for i in range(n_prev))
                 + '<th>Ahora</th><th>Veredicto de respaldo<br>(último corte)</th>')
     sec_sis = tabla(sis_head, rows, 800 + 70 * n_prev) if rows else ""
     # casas que solo tienen baterías (sin FV): se reportan aparte

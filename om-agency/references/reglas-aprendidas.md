@@ -459,3 +459,11 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** debajo de la etiqueta del veredicto, la primera línea es "tiempo que vio la casa: X" (suma de los huecos de tensión del medidor solar asociados a ese corte, la misma cifra de su % de respaldo) o "0 s, sin hueco"; luego van "alimenta" y la causa o el retardo de transferencia, como antes.
 
 **Dónde está el código:** `vio` y `vr_det` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Cortes anteriores con tiempo sin red y tiempo que vio la casa
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** en las columnas "Anterior 1…4" de la tabla "Por sistema", además del % de respaldo y la hora, se muestran el **tiempo que se fue la red** (duración del corte) y el **tiempo que el cliente vio la interrupción** (suma de huecos de tensión del medidor solar). Sustituye la regla de que la duración solo salía al pasar el cursor.
+
+**Dónde está el código:** `celdas_prev` y el encabezado "Anterior N" en `reporte-diario/reporte_html.py`.
