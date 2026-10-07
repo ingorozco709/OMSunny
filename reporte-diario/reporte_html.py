@@ -471,12 +471,19 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     continue
                 x1, x2 = xt(c["a"]), xt(b)
                 w = max(4.0, x2 - x1)
-                niv = _niv.get(c.get("veredicto"), "g")
                 tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {c.get("veredicto") or ""}'
-                svg.append(f'<rect class="tl {niv}{" lite" if c.get("veredicto") == "Respaldo total con transferencia" else ""}" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"><title>{esc(tip)}</title></rect>')
+                # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
+                rojos = ""
+                for h in c.get("hu") or []:
+                    hu_fin = h["b"] if h.get("b") else h["a"] + int(h["d"] * 1000)
+                    if hu_fin < W0 or h["a"] > W1:
+                        continue
+                    hx1, hx2 = xt(h["a"]), xt(hu_fin)
+                    rojos += f'<rect class="tl c" x="{hx1:.1f}" y="{y + 2}" width="{max(2.0, hx2 - hx1):.1f}" height="{RH - 5}"/>'
+                svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}</g>')
             y += RH
         linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 8} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
-        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Respaldo total</span><span><i class="lg g lite"></i>✓ Con transferencia</span><span><i class="lg w"></i>▲ Retardo de transferencia</span><span><i class="lg c"></i>✕ Caída o sin respaldo</span></div>'
+        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span></div>'
         # baterías: SOC actual de los sistemas por debajo de 50 %, con la reserva marcada
         TODOS_V = list(RS) + list(RB)
         socs = sorted(((R["sys"]["casa"], R["soc_ult"][1]) for R in TODOS_V if R["soc_ult"]), key=lambda x: x[1])
@@ -602,7 +609,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
     <h3>Por ciudad</h3>
     <div class="sema">{tarj_c}</div>
-    {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte; pasa el cursor para ver cuánto duró, cuánto lo vio la casa y su % de respaldo. Los cortes de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
+    {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
     {('<h3>Estado de carga (SOC) de las casas con cortes</h3>' + grafico_soc) if _cs else ''}
     <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
