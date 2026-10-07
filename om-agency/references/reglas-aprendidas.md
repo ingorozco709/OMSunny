@@ -493,3 +493,16 @@ Reportes Operativos Periódicos.
 **Cómo se genera:** `python3 reporte-diario/reporte_diario.py --solo-interrupciones` (ventana de las 00:00 de hoy a la hora de corte, hora de Bogotá). Usa el mismo análisis del reporte diario (cortes, huecos, veredicto de respaldo, último corte por casa, casas solo con baterías), pero la página solo lleva lo de cortes de red: titular con el estado (en curso o no), KPI de sistemas con cortes, % de respaldo, sistemas con falla de respaldo en su último corte y mayor tiempo sin tensión que vio una casa; puntos relevantes de interrupciones; resumen por ciudad; eventos de red; "Por sistema"; detalle por corte y límites. No lleva rendimiento, exportación ni comunicación. Se publica como Artifact aparte, sin tocar el del reporte diario.
 
 **Dónde está el código:** `--solo-interrupciones` en `reporte-diario/reporte_diario.py` y el bloque `solo_interrupciones` de `generar` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Vista rápida gráfica y tablas en desplegables (versión final del reporte diario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucciones del usuario (aplicadas y publicadas el 2026-10-07):**
+- El reporte lleva una sección "Vista rápida" con gráficas: semáforo del respaldo, tarjetas por ciudad, línea de tiempo de cortes con barras combinadas (verde respaldado, rojo lo que vio el cliente) y SOC al inicio del corte (último dato registrado si falta), mapa de calor casa × evento, histograma de lo que vio la casa (tooltip con las casas), batería inicio → mínimo → fin por casa (reemplaza las curvas de SOC), baterías por debajo de 50 %, generación frente a consumo, ranking de las casas por **energía exportada**, yield frente al patrón y hora de batería llena.
+- Se descartaron: curvas de SOC, cortes por hora del día y dispersión de generación frente a kWp.
+- Todas las tablas del reporte (desde "Por ciudad") y "Puntos más relevantes" van en desplegables cerrados.
+- El ranking que se pidió es de **exportación de energía**, no de cobertura solar: no sustituir el criterio que pide el usuario sin su confirmación. Con exportaciones menores a 1 kWh se muestra en Wh.
+- Cada instrucción nueva del usuario se ejecuta solo cuando lo autoriza ("no las ejecutes hasta que te dé la instrucción").
+
+**Dónde está el código:** bloque `VISUAL`/`sec_vis` y plantilla final de `reporte-diario/reporte_html.py`.
