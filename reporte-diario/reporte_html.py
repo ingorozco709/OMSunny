@@ -332,12 +332,16 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     + ((", y no tuvo cortes de red" if uno else ", y no tuvieron cortes de red") if sin_cortes else "") + ".")
         sec_bat = f'<h3>{"Casa solo con baterías (sin FV)" if uno else "Casas solo con baterías (sin FV)"}</h3>' + tabla(bat_head, rows, 900) + f'<p class="note">{esc(nota_bat)}</p>'
     # detalle por corte
+    def durante_txt(c):
+        """Huecos de tensión a mitad del corte (ni al caer ni al volver la red): duración y hora de inicio de cada uno."""
+        hs = [h for h in (c.get("hu") or []) if h.get("tipo") == "durante"]
+        return "<br>".join(f'{fmt(h["d"])}<small>{hb(h["a"])}</small>' for h in hs) if hs else "—"
     rows = []
     for R in con_cortes:
         for c in sorted(R["cortes"], key=lambda c: c["a"]):
             fin_c = "en curso" if c["b"] is None else hbd(c["b"])
-            rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(R["sys"]["ciudad"].title())}</small></td><td>{hbd(c["a"])}{"≈" if c.get("estimado") else ""}</td><td>{fin_c}</td><td class="n">{fmt(c["dur"])}</td><td class="n">{fmt(c["caer"]) if c["caer"] else "—"}</td><td class="n">{fmt(c["volver"]) if c["volver"] else "—"}</td><td class="n">{fmt(c["perc"]) if c["perc"] else "—"}</td><td class="n">{(dec(c["cob"], 1) + " %") if c["cob"] is not None else "—"}</td><td class="n">{soc_txt(c)}</td></tr>')
-    det_head = '<th>Sistema</th><th>Inicio</th><th>Fin</th><th class="n">Duración</th><th class="n">Hueco<br>al caer</th><th class="n">Hueco<br>al volver</th><th class="n">Total que<br>vio la casa</th><th class="n">Respaldo</th><th class="n">SOC inicio → mín → fin</th>'
+            rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(R["sys"]["ciudad"].title())}</small></td><td>{hbd(c["a"])}{"≈" if c.get("estimado") else ""}</td><td>{fin_c}</td><td class="n">{fmt(c["dur"])}</td><td class="n">{fmt(c["caer"]) if c["caer"] else "—"}</td><td class="n">{durante_txt(c)}</td><td class="n">{fmt(c["volver"]) if c["volver"] else "—"}</td><td class="n">{fmt(c["perc"]) if c["perc"] else "—"}</td><td class="n">{(dec(c["cob"], 1) + " %") if c["cob"] is not None else "—"}</td><td class="n">{soc_txt(c)}</td></tr>')
+    det_head = '<th>Sistema</th><th>Inicio</th><th>Fin</th><th class="n">Duración</th><th class="n">Hueco<br>al caer</th><th class="n">Hueco<br>durante</th><th class="n">Hueco<br>al volver</th><th class="n">Total que<br>vio la casa</th><th class="n">Respaldo</th><th class="n">SOC inicio → mín → fin</th>'
     sec_det = f'<details><summary>Detalle por corte ({len(rows)} filas)</summary><div style="margin-top:10px">{tabla(det_head, rows, 900)}</div></details>' if rows else ""
 
     # rendimiento
