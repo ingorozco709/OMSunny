@@ -39,6 +39,13 @@ svg polyline.sl{fill:none;stroke:var(--muted);stroke-width:1.2;opacity:.45;strok
 svg polyline.sl.hi{stroke:var(--crit);stroke-width:2.4;opacity:1}
 svg rect.band{fill:var(--crit-bg);opacity:.7}
 .legend i.lg.gen{background:var(--accent)} .legend i.lg.con{background:var(--muted);opacity:.55} .legend i.lg.gris{background:var(--muted);opacity:.45;height:3px} .legend i.lg.band{background:var(--crit-bg);border:1px solid var(--line)}
+svg line.dl2{stroke:var(--accent);stroke-width:2.2} svg line.dl2.r{stroke:var(--crit)}
+svg line.mn{stroke:var(--ink);stroke-width:2} svg line.mn.r{stroke:var(--crit)}
+svg circle.d0{fill:var(--surface);stroke:var(--ink2);stroke-width:2}
+svg circle.d1{fill:var(--accent);stroke:var(--surface);stroke-width:1.5} svg circle.d1.r{fill:var(--crit)}
+svg text.soc-n{font-family:var(--f-m);font-size:11px;fill:var(--ink2)}
+svg rect.hit,svg rect.hitb{fill:transparent} svg g.hg:hover rect.hitb{fill:var(--line2);opacity:.7} svg g.dm:hover rect.hit{fill:var(--line2);opacity:.7}
+.legend i.dotl.hueco{background:var(--surface);border:2px solid var(--ink2);box-sizing:border-box} .legend i.lg.marca{width:3px;height:12px;background:var(--ink)}
 .soc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 22px}
 .soc-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
 .soc-row .sn{width:74px;flex:none;white-space:nowrap}
@@ -570,50 +577,51 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                       f'<text class="lbl" x="{GX + GW + 150}" y="{yy + 28}" text-anchor="end">{dec(100 * a / b, 0)} %</text>')
         sg.append(f'<text class="ax" x="{GX + GW + 150}" y="{6}" text-anchor="end">cobertura</text>')
         grafico_gc = f'<div class="scroll"><svg viewBox="0 0 {GX + GW + 160} {16 + len(filas_g) * GH}" role="img" aria-label="Generación FV frente al consumo de los clientes por ciudad" style="min-width:720px">{"".join(sg)}</svg></div><div class="legend"><span><i class="lg gen"></i>Generación FV (balance de medidores)</span><span><i class="lg con"></i>Consumo de los clientes</span><span>cobertura = generación ÷ consumo</span></div>'
-        # curvas de SOC de las casas con cortes: en rojo las que llegaron a la reserva
-        CX0, CW, CH = 40, 940, 220
-        cy = lambda v: 10 + (100 - min(max(v, 0), 100)) / 100 * CH
-        sc = []
+        # batería en el corte más largo de cada casa: SOC al inicio → al final (con el mínimo), ordenadas de menor a mayor carga inicial
+        dm = []
+        for R in _cs:
+            cm = max(R["cortes"], key=lambda c: c["dur"] or 0)
+            if (cm["dur"] or 0) < 300 or cm.get("soc0") is None or cm.get("soc1") is None:
+                continue
+            dm.append((R, cm))
+        dm.sort(key=lambda x: (x[1]["soc0"], num_casa(x[0]["sys"]["casa"])))
+        DX0, DW, DH = 90, 700, 19
+        sd_ = []
+        dx = lambda v: DX0 + min(max(v, 0), 100) / 100 * DW
         for v in (0, 20, 40, 60, 80, 100):
             cls = "lim" if v == RESERVA else "grid"
-            sc.append(f'<line class="{cls}" x1="{CX0}" y1="{cy(v):.1f}" x2="{CX0 + CW}" y2="{cy(v):.1f}"/><text class="ax" x="{CX0 - 6}" y="{cy(v) + 4:.1f}" text-anchor="end">{v}</text>')
-        t_h = W0 - (W0 + 5 * 3600000) % (3 * 3600000) + 3 * 3600000
-        while t_h < W1:
-            x = CX0 + (t_h - W0) / span * CW
-            sc.append(f'<text class="ax" x="{x:.1f}" y="{cy(0) + 16:.1f}" text-anchor="middle">{hb(t_h)}</text>')
-            t_h += 3 * 3600000
-        _vistas = set()
-        for R in _cs:                                 # bandas de los cortes largos (5 min o más); un corte compartido por varias casas se dibuja una vez
-            for c in R["cortes"]:
-                k_b = (round(c["a"] / 180000), round((c["b"] or W1) / 180000))
-                if (c["dur"] or 0) >= 300 and k_b not in _vistas:
-                    _vistas.add(k_b)
-                    sc.append(f'<rect class="band" x="{CX0 + (max(c["a"], W0) - W0) / span * CW:.1f}" y="10" width="{max(2.0, (min(c["b"] or W1, W1) - max(c["a"], W0)) / span * CW):.1f}" height="{CH}"/>')
-        rojas, grises = [], []
-        for R in _cs:
-            pts_ = sorted((t, v) for t, v in (R.get("soc") or []) if W0 <= t <= W1 and v is not None)
-            if len(pts_) < 2:
-                continue
-            en_res = any(c.get("socmin") is not None and c["socmin"] <= RESERVA for c in R["cortes"])
-            pl = " ".join(f'{CX0 + (t - W0) / span * CW:.1f},{cy(v):.1f}' for t, v in pts_)
-            (rojas if en_res else grises).append((R, pl, pts_))
-        for R, pl, pts_ in grises:
-            sc.append(f'<polyline class="sl" points="{pl}"><title>{esc(R["sys"]["casa"])}</title></polyline>')
-        for R, pl, pts_ in rojas:
-            t_l, v_l = pts_[-1]
-            sc.append(f'<polyline class="sl hi" points="{pl}"><title>{esc(R["sys"]["casa"])} · llegó a la reserva</title></polyline><text class="lbl" x="{CX0 + CW - 4}" y="{cy(v_l) - 6:.1f}" text-anchor="end">{esc(R["sys"]["casa"])}</text>')
-        grafico_soc = f'<div class="scroll"><svg viewBox="0 0 {CX0 + CW + 8} {CH + 34}" role="img" aria-label="Estado de carga de las baterías de las casas con cortes durante la ventana" style="min-width:760px">{"".join(sc)}</svg></div><div class="legend"><span><i class="lg c"></i>llegó a la reserva durante un corte ({len(rojas)})</span><span><i class="lg gris"></i>resto de casas con cortes ({len(grises)})</span><span><i class="lg band"></i>cortes de 5 min o más</span><span>línea punteada: reserva {RESERVA:.0f} %</span></div>'
+            sd_.append(f'<line class="{cls}" x1="{dx(v):.1f}" y1="14" x2="{dx(v):.1f}" y2="{14 + len(dm) * DH}"/><text class="ax" x="{dx(v):.1f}" y="{14 + len(dm) * DH + 14}" text-anchor="middle">{v} %</text>')
+        for i, (R, cm) in enumerate(dm):
+            yy = 14 + i * DH + DH / 2
+            s0, s1, smin = cm["soc0"], cm["soc1"], cm.get("socmin")
+            en_res = smin is not None and smin <= RESERVA
+            tip = f'{R["sys"]["casa"]} · corte {hb(cm["a"])}–{"en curso" if cm["b"] is None else hb(cm["b"])} ({fmt(cm["dur"] or 0)}) · SOC al inicio {s0:.0f} % · mínimo {smin:.0f} % · al final {s1:.0f} %' if smin is not None else f'{R["sys"]["casa"]} · SOC al inicio {s0:.0f} % · al final {s1:.0f} %'
+            sd_.append(f'<g class="dm"><title>{esc(tip)}</title><text class="sm" x="{DX0 - 8}" y="{yy + 4:.1f}" text-anchor="end">{esc(R["sys"]["casa"])}</text>'
+                       f'<rect class="hit" x="0" y="{yy - DH / 2:.1f}" width="{DX0 + DW + 120}" height="{DH}"/>'
+                       f'<line class="dl2{" r" if en_res else ""}" x1="{dx(s0):.1f}" y1="{yy:.1f}" x2="{dx(s1):.1f}" y2="{yy:.1f}"/>'
+                       + (f'<line class="mn{" r" if en_res else ""}" x1="{dx(smin):.1f}" y1="{yy - 5:.1f}" x2="{dx(smin):.1f}" y2="{yy + 5:.1f}"/>' if smin is not None else "")
+                       + f'<circle class="d0" cx="{dx(s0):.1f}" cy="{yy:.1f}" r="4.5"/><circle class="d1{" r" if en_res else ""}" cx="{dx(s1):.1f}" cy="{yy:.1f}" r="4.5"/>'
+                       f'<text class="soc-n" x="{DX0 + DW + 12}" y="{yy + 4:.1f}">{s0:.0f} → {s1:.0f} %</text></g>')
+        n_baja = sum(1 for R, cm in dm if cm.get("socmin") is not None and cm["socmin"] <= RESERVA)
+        grafico_soc = f'<div class="scroll"><svg viewBox="0 0 {DX0 + DW + 110} {14 + len(dm) * DH + 22}" role="img" aria-label="Carga de la batería al inicio y al final del corte más largo de cada casa" style="min-width:720px">{"".join(sd_)}</svg></div><div class="legend"><span><i class="dotl hueco"></i>SOC al inicio del corte</span><span><i class="dotl ok"></i>SOC al final</span><span><i class="lg marca"></i>mínimo durante el corte</span><span><i class="lg c"></i>llegó a la reserva ({_pl(n_baja, 'casa', 'casas')})</span><span>línea punteada: reserva {RESERVA:.0f} %</span></div><p class="note">Se dibuja el corte más largo de cada casa entre los de 5 min o más ({len(dm)} casas), ordenadas de menor a mayor carga al inicio. Pasa el cursor sobre una fila para ver el detalle.</p>'
         # cuánto vio la casa en cada corte
-        todos_c = [c for R in _cs for c in R["cortes"]]
+        from collections import Counter as _Ctr
+        todos_cc = [(R["sys"]["casa"], c) for R in _cs for c in R["cortes"]]
+        todos_c = [c for _, c in todos_cc]
         bins = [("Sin hueco", lambda p: not p), ("Menos de 30 s", lambda p: 0 < p < 30), ("30 s a 2 min", lambda p: 30 <= p < 120), ("2 a 5 min", lambda p: 120 <= p < 300), ("5 min o más", lambda p: p >= 300)]
         cnt = [sum(1 for c in todos_c if f(c.get("perc") or 0)) for _, f in bins]
+        casas_b = []
+        for _, f in bins:
+            ct = _Ctr(k for k, c in todos_cc if f(c.get("perc") or 0))
+            casas_b.append(", ".join(f"{k}" + (f" ×{n}" if n > 1 else "") for k, n in sorted(ct.items(), key=lambda kv: num_casa(kv[0]))))
         mc = max(cnt or [1]) or 1
         sh = []
         for i, ((nom, _), n) in enumerate(zip(bins, cnt)):
             yy = 6 + i * 28
             niv = "g" if i == 0 else ("a" if i < 3 else ("w" if i == 3 else "c"))
-            sh.append(f'<text class="sm" x="4" y="{yy + 15}">{nom}</text><rect class="hb {niv}" x="110" y="{yy + 2}" width="{max(n / mc * 640, 2):.1f}" height="18" rx="3"><title>{nom}: {n} cortes</title></rect><text class="lbl" x="{110 + max(n / mc * 640, 2) + 8:.1f}" y="{yy + 16}">{n}</text>')
-        grafico_h = f'<div class="scroll"><svg viewBox="0 0 800 {12 + len(bins) * 28}" role="img" aria-label="Cantidad de cortes según el tiempo que la casa vio la interrupción" style="min-width:560px">{"".join(sh)}</svg></div><p class="note">Cada corte cuenta una vez ({len(todos_c)} en total). «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar en ese corte.</p>'
+            tip_b = f"{nom}: {n} cortes · " + (casas_b[i] if casas_b[i] else "ninguna casa")
+            sh.append(f'<g class="hg"><title>{esc(tip_b)}</title><rect class="hitb" x="0" y="{yy}" width="780" height="24"/><text class="sm" x="4" y="{yy + 15}">{nom}</text><rect class="hb {niv}" x="110" y="{yy + 2}" width="{max(n / mc * 640, 2):.1f}" height="18" rx="3"/><text class="lbl" x="{110 + max(n / mc * 640, 2) + 8:.1f}" y="{yy + 16}">{n}</text></g>')
+        grafico_h = f'<div class="scroll"><svg viewBox="0 0 800 {12 + len(bins) * 28}" role="img" aria-label="Cantidad de cortes según el tiempo que la casa vio la interrupción" style="min-width:560px">{"".join(sh)}</svg></div><p class="note">Cada corte cuenta una vez ({len(todos_c)} en total); pasa el cursor sobre una barra para ver qué casas son. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar en ese corte.</p>'
         sec_vis = f'''<section>
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
@@ -622,7 +630,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     <div class="sema">{tarj_c}</div>
     {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
-    {('<h3>Estado de carga (SOC) de las casas con cortes</h3>' + grafico_soc) if _cs else ''}
+    {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
     <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
     {bloque_soc}
     <h3>Generación frente a consumo de los clientes</h3>
