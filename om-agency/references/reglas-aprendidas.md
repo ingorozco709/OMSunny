@@ -542,3 +542,11 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** el eje horizontal del ranking de las casas por energía exportada se fija en **5 kWh** (marcas cada 1 kWh). Solo cuando una casa exporta más de 5 kWh el eje se vuelve dinámico: se ajusta al mayor valor, con marcas en pasos redondos (2, 5, 10, 50 kWh…).
 
 **Dónde está el código:** `max_ex`, `paso_k` y `mxk` en `grafico_rk` de `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — La hora de generación sale del título principal (h1)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** quitar la hora de generación solo del **título principal** del reporte ("Operación de las últimas 24 horas"). Se mantiene en el `<title>` de la página ("Operación diaria 7 oct · 16:26") y en la línea de datos del encabezado ("Generado 16:26"). Ajusta la entrada anterior ("La hora de generación va en el título"): el h1 ya no lleva "· generado HH:MM".
+
+**Dónde está el código:** encabezado `h1` en `reporte-diario/reporte_html.py`.

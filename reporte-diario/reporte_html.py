@@ -854,7 +854,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <div class="wrap">
 <header>
   <div class="kick">{'Fin de semana' if es_lunes else 'Últimas 24 horas'} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
-  <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'} <span class="gh">· generado {gen.strftime('%H:%M')}</span></h1>
+  <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>{horas:.0f} h de operación</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
 </header>
