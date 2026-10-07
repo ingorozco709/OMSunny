@@ -488,6 +488,79 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
 </div>
 '''
+    if getattr(args, "solo_interrupciones", False):
+        # reporte exclusivo de interrupciones: desde las 00:00 del día hasta la hora de corte; solo lo relacionado con los cortes de red
+        titulo = f"Interrupciones hoy {fin.day} {MESES[fin.month-1]}"
+        P_int = [p for p in P if p[1] in ("En curso", "Inversor aislado", "Interrupciones", "Respaldo", "Baterías")]
+        li_int = "".join(f'<li>{_pill(PILL[n], t)}<span>{esc(x)}</span></li>' for n, t, x in P_int)
+        ult = {id(R): max(R["cortes"], key=lambda c: c["a"]) for R in con_cortes}
+        n_ret = sum(1 for R in con_cortes if ult[id(R)].get("veredicto") == "Retardo de transferencia")
+        n_caida = sum(1 for R in con_cortes if ult[id(R)].get("veredicto") == "Caída durante el respaldo")
+        n_sin = sum(1 for R in con_cortes if ult[id(R)].get("veredicto") == "Sin respaldo")
+        n_mal = n_ret + n_caida + n_sin
+        k_mal = f'<div class="kpi {"k-warn" if n_mal else "k-ok"}"><div class="v">{n_mal} <small>de {len(con_cortes)}</small></div><div class="l">sistemas con falla de respaldo en su último corte: {n_ret} con retardo de transferencia, {n_caida} con caída durante el respaldo y {n_sin} sin respaldo.</div></div>' if con_cortes else ""
+        _mx = max(((R, c) for R in con_cortes for c in R["cortes"] if c.get("perc")), key=lambda x: x[1]["perc"], default=None)
+        k_mx = f'<div class="kpi"><div class="v">{fmt(_mx[1]["perc"])}</div><div class="l">fue el mayor tiempo sin tensión que vio una casa en un corte ({esc(_mx[0]["sys"]["casa"])}, corte de las {hb(_mx[1]["a"])}).</div></div>' if _mx else ""
+        rows_c = []
+        for c in ciudades:
+            g = [R for R in RS if R["sys"]["ciudad"] == c]
+            rows_c.append(f'<tr><td><b>{esc(c.title())}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{sum(len(R["cortes"]) for R in g)}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td></tr>')
+        sec_ciu_int = tabla('<th>Ciudad</th><th class="n">Sistemas</th><th class="n">Con<br>cortes</th><th class="n">Cortes</th><th class="n">Sin red<br>ahora</th>', rows_c, 520)
+        pagina = f'''<title>{esc(titulo)}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+{css}
+</style>
+<div class="wrap">
+<header>
+  <div class="kick">Hoy, hasta las {fin.strftime('%H:%M')} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
+  <h1>Interrupciones de hoy</h1>
+  <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
+  <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
+</header>
+
+<div class="kpis">
+  {k_sis}
+  {k_res}
+  {k_mal}
+  {k_mx}
+</div>
+
+<section>
+  <h2>Puntos más relevantes</h2>
+  <div class="card"><ul class="pts">{li_int}</ul></div>
+</section>
+
+<section>
+  <h2>Por ciudad</h2>
+  <div class="card">{sec_ciu_int}</div>
+</section>
+
+<section>
+  <h2>Interrupciones y respaldo</h2>
+  <div class="card" style="display:flex;flex-direction:column;gap:14px">
+    <h3>Eventos de red</h3>
+    {sec_ev}
+    {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
+    {sec_bat}
+    {sec_det}
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Límites del análisis</h2>
+  <div class="limits">
+    <p>El reporte cubre desde las 00:00 de hoy hasta la hora de corte; no incluye cortes anteriores. Un corte que empezó antes de las 00:00 se cuenta solo desde esa hora.</p>
+    <p>Los medidores de red sin tensión envían sus eventos guardados solo cuando vuelve la red. Un corte en curso se detecta con el inversor (entrada de red por debajo de 5 V) y su hora de inicio es aproximada (≈) hasta que vuelva la red.</p>
+    <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes.</p>
+    <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
+    <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.{lim_bat}</p>
+  </div>
+</section>
+<footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
+</div>
+'''
     with open(args.salida, "w", encoding="utf8") as f:
         f.write(pagina)
     resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], solo_baterias=[R["sys"]["casa"] for R in RB], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],

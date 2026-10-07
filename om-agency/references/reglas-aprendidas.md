@@ -483,3 +483,13 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** "Puntos más relevantes" se muestra como un desplegable, igual que "Detalle por corte" (cerrado por defecto, con el número de puntos en el título). El resumen de las viñetas en la respuesta de la rutina no cambia.
 
 **Dónde está el código:** bloque "Puntos más relevantes" de `reporte-diario/reporte_html.py`.
+
+## 2026-10-07 — Reporte exclusivo de interrupciones del día
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Solicitud del usuario:** "reporte exclusivo de las interrupciones que se han presentado el día de hoy hasta este momento".
+
+**Cómo se genera:** `python3 reporte-diario/reporte_diario.py --solo-interrupciones` (ventana de las 00:00 de hoy a la hora de corte, hora de Bogotá). Usa el mismo análisis del reporte diario (cortes, huecos, veredicto de respaldo, último corte por casa, casas solo con baterías), pero la página solo lleva lo de cortes de red: titular con el estado (en curso o no), KPI de sistemas con cortes, % de respaldo, sistemas con falla de respaldo en su último corte y mayor tiempo sin tensión que vio una casa; puntos relevantes de interrupciones; resumen por ciudad; eventos de red; "Por sistema"; detalle por corte y límites. No lleva rendimiento, exportación ni comunicación. Se publica como Artifact aparte, sin tocar el del reporte diario.
+
+**Dónde está el código:** `--solo-interrupciones` en `reporte-diario/reporte_diario.py` y el bloque `solo_interrupciones` de `generar` en `reporte-diario/reporte_html.py`.

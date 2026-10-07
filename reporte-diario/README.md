@@ -32,7 +32,10 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 ```
 python3 reporte-diario/reporte_diario.py                       # ventana automática que termina ahora
 python3 reporte-diario/reporte_diario.py --fin 2026-10-05T07:00 --inicio 2026-10-02T07:00
+python3 reporte-diario/reporte_diario.py --solo-interrupciones            # reporte exclusivo de interrupciones: desde las 00:00 de hoy hasta ahora
 ```
+Con `--solo-interrupciones` la ventana va de las 00:00 del día de `--fin` (o de hoy) a la hora de corte y la página trae solo lo relacionado con los cortes de red: puntos relevantes de interrupciones, resumen por ciudad, eventos de red, "Por sistema" (último corte y veredicto), casas solo con baterías, detalle por corte y límites; sin rendimiento, exportación ni comunicación. Publicar como Artifact aparte del reporte diario.
+
 Salida: `reporte_diario.html` (fragmento listo para publicar como Artifact) y `resumen_diario.json` (cifras y puntos relevantes).
 
 Requiere las variables `METRUM_API_URL`, `METRUM_USERNAME` y `METRUM_PASSWORD`. Solo lee datos de Metrum.

@@ -187,6 +187,8 @@ def ventana(args):
     fin = dt.datetime.strptime(args.fin, "%Y-%m-%dT%H:%M") if args.fin else ahora.replace(second=0, microsecond=0)
     if args.inicio:
         ini = dt.datetime.strptime(args.inicio, "%Y-%m-%dT%H:%M")
+    elif getattr(args, "solo_interrupciones", False):   # reporte de interrupciones: desde las 00:00 del día hasta la hora de corte
+        ini = fin.replace(hour=0, minute=0)
     elif fin.weekday() == 0:            # lunes: desde el viernes a las 7:00
         v = fin - dt.timedelta(days=3)
         ini = v.replace(hour=7, minute=0)
@@ -510,10 +512,12 @@ def eventos_de_red(RS):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fin"); ap.add_argument("--inicio")
+    ap.add_argument("--solo-interrupciones", dest="solo_interrupciones", action="store_true",
+                    help="reporte exclusivo de interrupciones: desde las 00:00 del día de --fin (o de ahora) hasta la hora de corte")
     ap.add_argument("--salida", default="reporte_diario.html"); ap.add_argument("--json", default="resumen_diario.json")
     args = ap.parse_args()
     W0, W1, ini, fin = ventana(args)
-    es_lunes = fin.weekday() == 0 and not args.inicio
+    es_lunes = fin.weekday() == 0 and not args.inicio and not args.solo_interrupciones
     # días locales de la ventana cuya jornada solar termina antes del fin (para generación y exportación)
     d = ini.replace(hour=0, minute=0, second=0, microsecond=0)
     dias = []
