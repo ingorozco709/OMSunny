@@ -471,11 +471,12 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         y = 26
         h_svg = 26 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
         # rejilla de horas cada 3 h (referida a la hora local de Bogotá)
-        t_h = W0 - (W0 + 5 * 3600000) % (3 * 3600000) + 3 * 3600000
+        paso_g = 3600000 if span <= 18 * 3600000 else 3 * 3600000   # ventana corta (reporte del día): una línea por hora
+        t_h = W0 - (W0 + 5 * 3600000) % paso_g + paso_g
         while t_h < W1:
             x = xt(t_h)
             svg.append(f'<line class="grid" x1="{x:.1f}" y1="16" x2="{x:.1f}" y2="{h_svg - 20}"/><text class="ax" x="{x:.1f}" y="11" text-anchor="middle">{hb(t_h)}</text>')
-            t_h += 3 * 3600000
+            t_h += paso_g
         ciu_ant = None
         for R in filas:
             s = R["sys"]
@@ -685,7 +686,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     niv = "n" if v is None else ("g" if v >= 99 else ("w" if v >= 90 else "c"))
                     vio_ = sum(c.get("perc") or 0 for c in mis)
                     tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hb(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
-                    shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{dec(v, 0) if v is not None else "—"}</text></g>')
+                    shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{(dec(v, 1) if 97 <= v < 100 else dec(v, 0)) if v is not None else "—"}</text></g>')
             grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; solo eventos con 3 casas o más</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)
         d_ult = dias[-1][0]
@@ -751,6 +752,67 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 sk.append(f'<g class="dm"><title>{esc(tip)}</title><rect class="hit" x="0" y="{yy}" width="{KX0 + KW + 80}" height="{KH}"/><text class="sm" x="{KX0 - 8}" y="{yy + 12}" text-anchor="end">{i + 1}. {esc(R["sys"]["casa"])}</text>{barra}<text class="soc-n" x="{KX0 + w_k + 6:.1f}" y="{yy + 12}">{dec(ex_k * fk, dk)} {uk}</text></g>')
             n_cero = sum(1 for R in rk if R["exp"]["total"] <= 0)
             grafico_rk = f'<div class="scroll"><svg viewBox="0 0 {KX0 + KW + 80} {10 + len(rk) * KH + 22}" role="img" aria-label="Ranking de las casas por energía exportada a la red" style="min-width:720px">{"".join(sk)}</svg></div><div class="legend"><span><i class="lg gen"></i>energía activa exportada a la red en la ventana ({uk})</span><span>{_pl(n_cero, "casa", "casas")} con 0 {uk} exportados</span><span>pasa el cursor para ver importada, generación y % exportado de cada casa</span></div>'
+        # ---- reporte de interrupciones: tarjetas por ciudad y línea de tiempo de eventos de red
+        tarj_c_int, grafico_ev = "", ""
+        if getattr(args, "solo_interrupciones", False):
+            _prio = {"g": 0, "w": 1, "c": 2}
+            for c in ciudades:
+                g = [R for R in RS if R["sys"]["ciudad"] == c]
+                con = [R for R in g if R["cortes"]]
+                peor = "g"
+                for R in con:
+                    v = _niv.get(_ult[R["sys"]["casa"]].get("veredicto"), "g")
+                    if _prio[v] > _prio[peor]:
+                        peor = v
+                if any(R["en_curso"] for R in g):
+                    peor = "c"
+                evs_c = [e for e in EV if e["ciudad"] == c]
+                cobs_c = [c_["cob"] for R in con for c_ in R["cortes"] if c_.get("cob") is not None]
+                mayor_c = max((e["dur"] or 0 for e in evs_c), default=0)
+                res_c = sum(1 for R in list(g) + [Q for Q in RB if Q["sys"]["ciudad"] == c] if R["soc_ult"] and R["soc_ult"][1] <= RESERVA)
+                tarj_c_int += (f'<div class="sm-card {peor}"><div class="t"><span class="ic" aria-hidden="true">{_ico[peor]}</span>{esc(c.title())}</div>'
+                               f'<div class="v">{len(con)}<span class="de"> de {len(g)}</span></div><small>sistemas con cortes</small>'
+                               f'<div class="kv"><span>Cortes · eventos</span><b>{sum(len(R["cortes"]) for R in g)} · {len(evs_c)}</b></div>'
+                               f'<div class="kv"><span>Evento más largo</span><b>{fmt(mayor_c) if mayor_c else "—"}</b></div>'
+                               f'<div class="kv"><span>Respaldo mediano</span><b>{dec(st.median(cobs_c), 1) + " %" if cobs_c else "—"}</b></div>'
+                               f'<div class="kv"><span>Sin red ahora</span><b>{sum(1 for R in g if R["en_curso"])}</b></div>'
+                               f'<div class="kv"><span>Baterías en reserva</span><b>{res_c}</b></div></div>')
+            evs_g = sorted(EV, key=lambda e: (ordenar_ciudad(e["ciudad"]), e["ini"]))
+            if evs_g:
+                EX0, EPW, ERH, ETX = 132, 560, 28, 14
+                span_e = max(1, W1 - W0)
+                xe = lambda t: EX0 + (min(max(t, W0), W1) - W0) / span_e * EPW
+                h_ev = 24 + len(evs_g) * ERH + 6
+                se = []
+                paso_e = 3600000 if span_e <= 18 * 3600000 else 3 * 3600000
+                t_h = W0 - (W0 + 5 * 3600000) % paso_e + paso_e
+                while t_h < W1:
+                    x = xe(t_h)
+                    if paso_e > 3600000 or fecha_bog(t_h).hour % 2 == 0:
+                        se.append(f'<text class="ax" x="{x:.1f}" y="12" text-anchor="middle">{hb(t_h)}</text>')
+                    se.append(f'<line class="grid" x1="{x:.1f}" y1="18" x2="{x:.1f}" y2="{h_ev - 6}"/>')
+                    t_h += paso_e
+                se.append(f'<text class="ax" x="{EX0 + EPW + ETX}" y="12">afectados · duración típica · peor respaldo</text>')
+                for i, e in enumerate(evs_g):
+                    yy = 24 + i * ERH
+                    mem = e["m"]
+                    cobs_e = [(c_["cob"], R_["sys"]["casa"]) for R_, c_ in mem if c_.get("cob") is not None]
+                    peor_e = min(cobs_e, default=None)
+                    niv_e = "g" if (peor_e is None or peor_e[0] >= 99) else ("w" if peor_e[0] >= 90 else "c")
+                    x1, x2 = xe(e["ini"]), xe(e["fin"] if e["fin"] is not None else W1)
+                    w_e = max(6.0, x2 - x1)
+                    n_tot = n_por_ciudad.get(e["ciudad"], 0)
+                    txt_e = f'{e["n"]} de {n_tot} · {fmt(e["dur"]) if e["dur"] else "—"}' + (f' · {dec(peor_e[0], 1)} % ({peor_e[1]})' if peor_e else "")
+                    tip_e = (f'{e["ciudad"].title()} · {hbd(e["ini"])}–{"en curso" if e["fin"] is None else hbd(e["fin"])} · {e["n"]} de {n_tot} sistemas · duración típica {fmt(e["dur"]) if e["dur"] else "—"}'
+                             + (f' · peor respaldo {dec(peor_e[0], 1)} % ({peor_e[1]})' if peor_e else "")
+                             + f' · casas con hueco: {len({id(R_) for R_, c_ in mem if (c_.get("perc") or 0) > 0})}')
+                    se.append(f'<g class="tg"><title>{esc(tip_e)}</title><text class="sm" x="{EX0 - 8}" y="{yy + 15}" text-anchor="end">{esc(e["ciudad"].title()[:11])} {hb(e["ini"])}</text>'
+                              f'<line class="lane" x1="{EX0}" y1="{yy + ERH - 3}" x2="{EX0 + EPW}" y2="{yy + ERH - 3}"/>'
+                              f'<rect class="tl {niv_e}" x="{x1:.1f}" y="{yy + 3}" width="{w_e:.1f}" height="{ERH - 9}" rx="3"/>'
+                              f'<text class="soc-n" x="{EX0 + EPW + ETX}" y="{yy + 16}">{esc(txt_e)}</text></g>')
+                grafico_ev = (f'<div class="scroll"><svg viewBox="0 0 {EX0 + EPW + ETX + 360} {h_ev}" role="img" aria-label="Eventos de red del día por ciudad y hora" style="min-width:860px">{"".join(se)}</svg></div>'
+                              '<div class="legend"><span><i class="lg g"></i>✓ peor casa con 99 % de respaldo o más</span><span><i class="lg w"></i>▲ peor casa entre 90 y 99 %</span><span><i class="lg c"></i>✕ peor casa con menos de 90 %</span>'
+                              '<span>cada barra es un evento (varias casas de una ciudad sin red al mismo tiempo); su largo es el tiempo desde el primer corte hasta el último regreso de la red</span></div>')
         sec_vis = f'''<section>
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
@@ -865,11 +927,21 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         k_mal = f'<div class="kpi {"k-warn" if n_mal else "k-ok"}"><div class="v">{n_mal} <small>de {len(con_cortes)}</small></div><div class="l">sistemas con falla de respaldo en su último corte: {n_ret} con retardo de transferencia, {n_caida} con caída durante el respaldo y {n_sin} sin respaldo.</div></div>' if con_cortes else ""
         _mx = max(((R, c) for R in con_cortes for c in R["cortes"] if c.get("perc")), key=lambda x: x[1]["perc"], default=None)
         k_mx = f'<div class="kpi"><div class="v">{fmt(_mx[1]["perc"])}</div><div class="l">fue el mayor tiempo sin tensión que vio una casa en un corte ({esc(_mx[0]["sys"]["casa"])}, corte de las {hb(_mx[1]["a"])}).</div></div>' if _mx else ""
-        rows_c = []
-        for c in ciudades:
-            g = [R for R in RS if R["sys"]["ciudad"] == c]
-            rows_c.append(f'<tr><td><b>{esc(c.title())}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{sum(len(R["cortes"]) for R in g)}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td></tr>')
-        sec_ciu_int = tabla('<th>Ciudad</th><th class="n">Sistemas</th><th class="n">Con<br>cortes</th><th class="n">Cortes</th><th class="n">Sin red<br>ahora</th>', rows_c, 520)
+        vis_int = f'''<section>
+  <h2>Vista rápida</h2>
+  <div class="card" style="display:flex;flex-direction:column;gap:18px">
+    {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
+    <h3>Por ciudad</h3>
+    <div class="sema">{tarj_c_int}</div>
+    {('<h3>Eventos de red del día</h3>' + grafico_ev) if grafico_ev else ''}
+    {('<h3>Cortes de red de hoy, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
+    {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
+    {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
+    {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
+    <h3>Baterías por debajo de 50 % al corte del reporte ({n_res} en reserva)</h3>
+    {bloque_soc}
+  </div>
+</section>''' if VISUAL else ""
         pagina = f'''<title>{esc(titulo)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -890,23 +962,18 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   {k_mx}
 </div>
 
-<section>
-  <h2>Puntos más relevantes</h2>
-  <div class="card"><ul class="pts">{li_int}</ul></div>
-</section>
+{vis_int}
 
 <section>
-  <h2>Por ciudad</h2>
-  <div class="card">{sec_ciu_int}</div>
+  <details><summary>Puntos más relevantes ({len(P_int)})</summary><div style="margin-top:10px"><ul class="pts">{li_int}</ul></div></details>
 </section>
 
 <section>
   <h2>Interrupciones y respaldo</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:14px">
-    <h3>Eventos de red</h3>
-    {sec_ev}
-    {('<h3>Por sistema</h3>' + sec_sis) if sec_sis else ''}
-    {sec_bat}
+    <details><summary>Eventos de red</summary><div style="margin-top:10px">{sec_ev}</div></details>
+    {('<details><summary>Por sistema</summary><div style="margin-top:10px">' + sec_sis + '</div></details>') if sec_sis else ''}
+    {('<details><summary>' + tit_bat + '</summary><div style="margin-top:10px">' + sec_bat + '</div></details>') if sec_bat else ''}
     {sec_det}
     <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
