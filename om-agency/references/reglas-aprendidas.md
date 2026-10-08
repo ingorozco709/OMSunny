@@ -616,3 +616,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** una sola constante, `YIELD_ALERTA = 0.90` en `reporte-diario/reporte_html.py`, define: la línea punteada y su eje "90 %" en la gráfica de yield, el color de los puntos (azul ≥ 90 %, ámbar por debajo), la cuenta "por debajo de 90 % (N sistemas)" de la leyenda y la alerta "baja vs patrón" de la tabla "Rendimiento" y de los puntos relevantes (con sus causas "bajo consumo" y "producción limitada", que siguen igual). El 7-oct pasó de 37 a 41 sistemas por debajo del umbral. El umbral de "bajo consumo" (75 % del consumo habitual de la casa, `CONSUMO_BAJO`) no cambia.
 
 **Dónde está el código:** `YIELD_ALERTA` y su uso en `reporte-diario/reporte_html.py` (alerta, gráfica de yield y nota de la tabla Rendimiento).
+
+## 2026-10-08 — El nombre del reporte (título de la página) no lleva la hora
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "quita la hora del nombre del reporte". Reemplaza la entrada anterior que agregaba la hora de generación al `<title>`.
+
+**Cómo se aplicó:** el `<title>` del reporte diario queda solo como "Operación diaria 8 oct" (sin "· HH:MM"), igual que el del reporte de interrupciones. El título principal visible tampoco lleva la hora. La hora de generación se conserva únicamente en la línea de datos del encabezado ("Generado 09:03") y la hora del corte del reporte, en el título de la gráfica de baterías.
+
+**Dónde está el código:** plantilla `pagina` del reporte diario en `reporte-diario/reporte_html.py`.

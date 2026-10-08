@@ -914,7 +914,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
     gen = fecha_bog(int(time.time() * 1000))
-    pagina = f'''<title>{esc(titulo)} · {gen.strftime('%H:%M')}</title>
+    pagina = f'''<title>{esc(titulo)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 {css}
