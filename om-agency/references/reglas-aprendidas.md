@@ -560,3 +560,11 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el SVG del mapa de calor lleva `min-width:0` y su ancho natural en px, así que conserva la proporción del resto del reporte. Se agregó `TOUCH_JS` (script al final de la página): en pantallas sin cursor (`hover: none`), al tocar una barra, punto o celda se muestra el mismo texto del `<title>` (o del atributo `title`) en un recuadro flotante que se oculta al tocar en otro lado, al desplazarse o a los 8 s. En equipos con cursor no hace nada y siguen los tooltips nativos.
 
 **Dónde está el código:** `TOUCH_JS` y el estilo del SVG del mapa de calor en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — Título del mapa de calor (eventos de 3 casas o más) y SOC visible en barras angostas
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucciones del usuario:** (1) el mapa de calor "Respaldo de cada casa en los eventos de red" solo dibuja eventos que afectaron a **3 casas o más** (criterio por número de casas, no por minutos), así que deja fuera los cortes de 1 o 2 casas (p. ej. Casa 48PC y Casa 121 CR el 7-oct). El título lo dice: "· solo eventos que afectaron a 3 casas o más; no incluye los cortes de 1 o 2 casas (microcortes)". (2) La etiqueta "SOC xx%" al inicio del corte en la línea de tiempo no se quitó: solo se ocultaba cuando la barra medía menos de 52 px (cortes cortos frente a las 24 h, como los 40 min de Turbaco). Ahora, en cortes de 5 min o más, va dentro de la barra si cabe y a su derecha si es angosta.
+
+**Dónde está el código:** `etiqueta` en la línea de tiempo y el título del mapa de calor en `reporte-diario/reporte_html.py`.
