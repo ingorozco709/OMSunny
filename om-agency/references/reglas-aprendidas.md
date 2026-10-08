@@ -586,3 +586,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** un evento entra al mapa si afectó a 3 casas o más de un mismo conjunto (zona) o, en conjuntos con menos de 3 sistemas, al conjunto completo (afectados >= min(3, tamaño del conjunto)). El tamaño del conjunto sale del atributo `zona` de los sistemas incluidos. Quedan fuera los cortes de 1 o 2 casas de un conjunto grande (p. ej. Casa 73 en Reservas de Pance). El título lo explica. El 7-oct el mapa pasó de 2 a 8 columnas e incluye la Casa 48PC (4 eventos) y la Casa 121 CR (2 eventos).
 
 **Dónde está el código:** `_entra` y `evs` del mapa de calor en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El título del mapa de calor vuelve a ser corto
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** quitar el texto en gris del título del mapa de calor "Respaldo de cada casa en los eventos de red" (el que explicaba el criterio de los eventos).
+
+**Cómo se aplicó:** el `<h3>` queda solo como "Respaldo de cada casa en los eventos de red", sin el `<span class="h3s">`. El criterio de qué eventos entran (3 casas o más de un conjunto, o conjunto completo de menos de 3 casas) no cambia; solo queda en la nota al pie del mapa ("cada celda es el % de respaldo del corte; solo eventos de 3 casas o más de un conjunto, o de un conjunto completo de menos de 3 casas").
+
+**Dónde está el código:** los dos `<h3>` del mapa de calor (reporte diario e interrupciones) en `reporte-diario/reporte_html.py`.

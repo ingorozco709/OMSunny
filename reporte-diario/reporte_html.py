@@ -882,7 +882,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     <h3>Por ciudad</h3>
     <div class="sema">{tarj_c}</div>
     {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
-    {('<h3>Respaldo de cada casa en los eventos de red <span class="h3s">· eventos que afectaron a 3 casas o más de un mismo conjunto, o a un conjunto completo de menos de 3 casas (p. ej. Castellana Real, Pance Campestre); no incluye cortes de 1 o 2 casas de un conjunto grande (microcortes)</span></h3>' + grafico_hm) if grafico_hm else ''}
+    {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
     {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
     <h3>Baterías por debajo de 50 % al corte del reporte, {hbd(W1)} ({n_res} en reserva)</h3>
@@ -998,7 +998,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     <div class="sema">{tarj_c_int}</div>
     {('<h3>Eventos de red del día</h3>' + grafico_ev) if grafico_ev else ''}
     {('<h3>Cortes de red de hoy, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
-    {('<h3>Respaldo de cada casa en los eventos de red <span class="h3s">· eventos que afectaron a 3 casas o más de un mismo conjunto, o a un conjunto completo de menos de 3 casas (p. ej. Castellana Real, Pance Campestre); no incluye cortes de 1 o 2 casas de un conjunto grande (microcortes)</span></h3>' + grafico_hm) if grafico_hm else ''}
+    {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
     {('<h3>Batería durante el corte más largo de cada casa</h3>' + grafico_soc) if _cs else ''}
     <h3>Baterías por debajo de 50 % al corte del reporte, {hbd(W1)} ({n_res} en reserva)</h3>
