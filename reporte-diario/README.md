@@ -26,6 +26,7 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 - Pilotos (Promigas) excluidos siempre. Casa 447p, solo baterías: excluida de generación, yield y cobertura (ver `exclusiones.json`), pero se reporta en la tabla de casas solo con baterías.
 
 ## Estilo del reporte
+Fondo oscuro único (decisión del usuario): la paleta oscura está en el `:root` de `estilos.css` con `color-scheme: dark`; no hay variante clara ni cambia con el tema del equipo o del navegador. Los colores van siempre por tokens (`--bg`, `--surface`, `--ink`…), nunca literales.
 `estilos.css` + `EXTRA_CSS` de `reporte_html.py` (encabezados de tablas con `<br>` y fuente 9,5 px para que no se apilen). Referencia visual: `ejemplo/reporte_2026-10-06.html` (versión publicada del 6 de octubre; su tabla de la Casa 447p y los puntos "Baterías en reserva" e "Inversores igf" se agregaron a mano y hoy los genera el script). Publicar el HTML como Artifact actualizando siempre la misma URL del reporte diario.
 
 ## Uso

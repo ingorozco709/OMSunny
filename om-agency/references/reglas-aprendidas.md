@@ -626,3 +626,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el `<title>` del reporte diario queda solo como "Operación diaria 8 oct" (sin "· HH:MM"), igual que el del reporte de interrupciones. El título principal visible tampoco lleva la hora. La hora de generación se conserva únicamente en la línea de datos del encabezado ("Generado 09:03") y la hora del corte del reporte, en el título de la gráfica de baterías.
 
 **Dónde está el código:** plantilla `pagina` del reporte diario en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El reporte va con fondo oscuro
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "cambie el reporte a fondo oscuro".
+
+**Cómo se aplicó:** en `reporte-diario/estilos.css` la paleta oscura (`--bg:#0f1317`, `--surface:#161b20`, texto `#e7edf1`…) pasó a ser la base del `:root` con `color-scheme: dark`, y se quitaron la paleta clara y los bloques `prefers-color-scheme` / `[data-theme]`. El reporte se ve oscuro siempre, sin depender del tema del equipo o del navegador de quien lo abre. Aplica al reporte diario y al de interrupciones (comparten `estilos.css`). Las gráficas y tablas usan tokens, así que no hubo que tocar sus colores. Para volver al tema claro basta restaurar la paleta clara en el `:root` de `estilos.css` (queda en el historial de git).
+
+**Dónde está el código:** `:root` de `reporte-diario/estilos.css`.
