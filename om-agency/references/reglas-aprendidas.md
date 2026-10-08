@@ -606,3 +606,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** la etiqueta del SOC al inicio del corte (cortes de 5 min o más) sigue dentro de la barra y ahora va precedida de un icono de batería con el nivel de carga: icono + "SOC 39%" si la barra es ancha (62 px o más), icono + "39%" en letra chica si es angosta, icono + "39" si es muy angosta (unos 24 px, p. ej. un corte de 30 min frente a 24 h) y, solo si ni así cabe, a su derecha. La leyenda de la gráfica pasa a ser el primer elemento y lleva el mismo icono: "SOC: carga de la batería al inicio del corte, no es el respaldo (cortes de 5 min o más; * = último dato registrado)".
 
 **Dónde está el código:** `icono_bateria` y `etiqueta` en la línea de tiempo, `leyenda_t` y las clases `.bat` / `.bat-f` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El umbral de "baja vs patrón" y la línea punteada del yield pasan a 90 %
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "la línea punteada [de la gráfica de yield frente al patrón de su región] debe estar al 90 %". Reemplaza el 75 % de las entradas anteriores sobre "baja vs patrón".
+
+**Cómo se aplicó:** una sola constante, `YIELD_ALERTA = 0.90` en `reporte-diario/reporte_html.py`, define: la línea punteada y su eje "90 %" en la gráfica de yield, el color de los puntos (azul ≥ 90 %, ámbar por debajo), la cuenta "por debajo de 90 % (N sistemas)" de la leyenda y la alerta "baja vs patrón" de la tabla "Rendimiento" y de los puntos relevantes (con sus causas "bajo consumo" y "producción limitada", que siguen igual). El 7-oct pasó de 37 a 41 sistemas por debajo del umbral. El umbral de "bajo consumo" (75 % del consumo habitual de la casa, `CONSUMO_BAJO`) no cambia.
+
+**Dónde está el código:** `YIELD_ALERTA` y su uso en `reporte-diario/reporte_html.py` (alerta, gráfica de yield y nota de la tabla Rendimiento).

@@ -93,6 +93,7 @@ document.addEventListener('click',function(e){
 window.addEventListener('scroll',ocultar,{passive:true});
 })();"""
 
+YIELD_ALERTA = 0.90  # por debajo de esta fracción del yield patrón de la región: alerta "baja vs patrón" y línea punteada de la gráfica de yield
 VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
 
@@ -172,7 +173,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             flag = ("off", "sin cierre diario del medidor")
         elif R["pv_tot"] == 0:
             flag = ("crit", "sin producción")
-        elif R["ratio"] is not None and R["ratio"] < 0.75:
+        elif R["ratio"] is not None and R["ratio"] < YIELD_ALERTA:
             causas = []
             if R["bajo_consumo"]:
                 causas.append("bajo consumo")
@@ -587,20 +588,20 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         XY0, PY, LH = 96, 840, 40
         sy = []
         escx = lambda r: XY0 + min(max(r, 0), 1.6) / 1.6 * PY
-        for tick in (0, .25, .5, .75, 1.0, 1.25, 1.5):
+        for tick in (0, .25, .5, .75, YIELD_ALERTA, 1.0, 1.25, 1.5):
             x = escx(tick)
-            cls = "pat" if tick == 1.0 else ("lim" if tick == .75 else "grid")
+            cls = "pat" if tick == 1.0 else ("lim" if tick == YIELD_ALERTA else "grid")
             sy.append(f'<line class="{cls}" x1="{x:.1f}" y1="14" x2="{x:.1f}" y2="{14 + len(lan) * LH}"/><text class="ax" x="{x:.1f}" y="{14 + len(lan) * LH + 14}" text-anchor="middle">{tick * 100:.0f} %</text>')
         for i, c in enumerate(lan):
             yy = 14 + i * LH
             sy.append(f'<text class="lbl" x="4" y="{yy + 24}">{esc(c.title())}</text><line class="lane" x1="{XY0}" y1="{yy + LH}" x2="{XY0 + PY}" y2="{yy + LH}"/>')
             grp = sorted([(R, r) for R, r in pts if R["sys"]["ciudad"] == c], key=lambda x: x[1])
             for j, (R, r) in enumerate(grp):
-                niv = "w" if r < 0.75 else "ok"
+                niv = "w" if r < YIELD_ALERTA else "ok"
                 tip = f'{R["sys"]["casa"]} · yield {dec(R["sy_anual"], 0)} kWh/kWp·año · {dec(100 * r, 0)} % del patrón' + (f' · {R["flag"][1]}' if R["flag"] else "")
                 sy.append(f'<circle class="yd {niv}" cx="{escx(r):.1f}" cy="{yy + 14 + (j % 3) * 8}" r="5"><title>{esc(tip)}</title></circle>')
-        n_baj = sum(1 for _, r in pts if r < 0.75)
-        grafico_y = f'<div class="scroll"><svg viewBox="0 0 {XY0 + PY + 20} {14 + len(lan) * LH + 22}" role="img" aria-label="Yield proyectado de cada casa frente al patrón de su región" style="min-width:720px">{"".join(sy)}</svg></div><div class="legend"><span><i class="dotl ok"></i>≥ 75 % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 % ({n_baj} sistemas)</span><span>línea continua: 100 % del patrón de su región · punteada: 75 %</span></div>'
+        n_baj = sum(1 for _, r in pts if r < YIELD_ALERTA)
+        grafico_y = f'<div class="scroll"><svg viewBox="0 0 {XY0 + PY + 20} {14 + len(lan) * LH + 22}" role="img" aria-label="Yield proyectado de cada casa frente al patrón de su región" style="min-width:720px">{"".join(sy)}</svg></div><div class="legend"><span><i class="dotl ok"></i>≥ {YIELD_ALERTA * 100:.0f} % del patrón</span><span><i class="dotl w"></i>▲ por debajo de {YIELD_ALERTA * 100:.0f} % ({n_baj} sistemas)</span><span>línea continua: 100 % del patrón de su región · punteada: {YIELD_ALERTA * 100:.0f} %</span></div>'
         # tarjetas por ciudad, con el color de la peor situación de la ciudad
         _prio = {"g": 0, "w": 1, "c": 2}
         tarj_c = ""
@@ -794,10 +795,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 s4.append(f'<line class="pat" x1="{sx(0):.1f}" y1="{sy_(0):.1f}" x2="{sx(mxx):.1f}" y2="{sy_(yy2):.1f}"/><text class="lbl" x="{sx(mxx) - 4:.1f}" y="{sy_(yy2) + (-6 if nom == "Costa" else 16):.1f}" text-anchor="end">patrón {nom} ({pat})</text>')
             for R in p4:
                 r_ = R.get("ratio")
-                niv = "w" if (r_ is not None and r_ < 0.75) else "ok"
+                niv = "w" if (r_ is not None and r_ < YIELD_ALERTA) else "ok"
                 tip = f'{R["sys"]["casa"]} · {dec(R["sys"]["cap"], 2)} kWp · generó {dec(R["pv_tot"], 1)} kWh · yield {dec(R["sy_anual"], 0) if R["sy_anual"] is not None else "—"} · {dec(100 * r_, 0) + " % del patrón" if r_ is not None else ""}'
                 s4.append(f'<circle class="yd {niv}" cx="{sx(R["sys"]["cap"]):.1f}" cy="{sy_(R["pv_tot"]):.1f}" r="5"><title>{esc(tip)}</title></circle>')
-            grafico_dp = f'<div class="scroll"><svg viewBox="0 0 {SX0 + SW + 10} {SH + 52}" role="img" aria-label="Generación del día frente a la potencia instalada de cada casa" style="min-width:720px">{"".join(s4)}<text class="ax" x="{SX0 + SW / 2:.1f}" y="{SH + 46}" text-anchor="middle">potencia instalada (kWp)</text><text class="ax" x="12" y="{10 + SH / 2:.1f}" text-anchor="middle" transform="rotate(-90 12 {10 + SH / 2:.1f})">generación del día (kWh)</text></svg></div><div class="legend"><span><i class="dotl ok"></i>≥ 75 % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 %</span><span>las líneas son la generación esperada con el yield patrón de cada región (kWp × patrón ÷ 365)</span></div>'
+            grafico_dp = f'<div class="scroll"><svg viewBox="0 0 {SX0 + SW + 10} {SH + 52}" role="img" aria-label="Generación del día frente a la potencia instalada de cada casa" style="min-width:720px">{"".join(s4)}<text class="ax" x="{SX0 + SW / 2:.1f}" y="{SH + 46}" text-anchor="middle">potencia instalada (kWp)</text><text class="ax" x="12" y="{10 + SH / 2:.1f}" text-anchor="middle" transform="rotate(-90 12 {10 + SH / 2:.1f})">generación del día (kWh)</text></svg></div><div class="legend"><span><i class="dotl ok"></i>≥ {YIELD_ALERTA * 100:.0f} % del patrón</span><span><i class="dotl w"></i>▲ por debajo de 75 %</span><span>las líneas son la generación esperada con el yield patrón de cada región (kWp × patrón ÷ 365)</span></div>'
         # ---- ranking de las casas por energía exportada a la red (energyAE del medidor de red, en la ventana del reporte)
         rk = sorted([R for R in RS if R["exp"].get("total") is not None], key=lambda R: (-R["exp"]["total"], num_casa(R["sys"]["casa"])))
         grafico_rk = ""
@@ -961,7 +962,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <section>
   <details><summary>Rendimiento de los sistemas</summary><div style="margin-top:10px">
     {sec_pv}
-    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del 75 % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos. Se añade «producción limitada» cuando la batería llegó a {BATERIA_LLENA_SOC} % antes de las {LLENO_ANTES_H}:00, y «producción limitada en la tarde» cuando llegó entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00, porque entonces solo se limita parte de la tarde (se indica la hora): en sistemas sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa, así que el yield mide la energía solar consumida y no la que el sistema podría producir.</p>
+    <p class="note" style="margin-top:10px">Generación = balance de medidores con los cierres diarios: demanda del medidor solar (<code>CenergyAI</code>) − importada + exportada del medidor de red. No se usa el contador del inversor. «Yield anual proyectado» es la generación real del día dividida entre la potencia instalada, por 365; en el portafolio Sunny y en cada ciudad, la suma de generación entre la suma de potencia. La potencia instalada es la potencia pico en DC (kWp) del archivo de sistemas, no la del inversor, y no se corrige estacionalidad ni clima. «Frente al yield patrón» es el yield anual proyectado del sistema dividido entre el yield patrón de su región, definido por el equipo: {YIELD_PATRON["CALI"]} kWh/kWp·año en Cali y {YIELD_PATRON["COSTA"]} kWh/kWp·año en la costa (Turbaco, Barranquilla y Cartagena). La alerta «baja vs patrón» aparece por debajo del {YIELD_ALERTA * 100:.0f} % del patrón y se completa con «bajo consumo» cuando el consumo del cliente en el día evaluado (demanda del medidor solar) fue menor al {CONSUMO_BAJO * 100:.0f} % del habitual de esa casa, medido como la mediana de sus días previos; en ese caso la baja generación puede deberse a que la casa consumió menos. Se añade «producción limitada» cuando la batería llegó a {BATERIA_LLENA_SOC} % antes de las {LLENO_ANTES_H}:00, y «producción limitada en la tarde» cuando llegó entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00, porque entonces solo se limita parte de la tarde (se indica la hora): en sistemas sin exportación, con la batería llena el inversor limita la producción FV al consumo de la casa, así que el yield mide la energía solar consumida y no la que el sistema podría producir.</p>
   </div></details>
 </section>
 
