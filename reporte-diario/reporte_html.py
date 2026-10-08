@@ -29,6 +29,8 @@ svg rect.tl.g{fill:var(--good)} svg rect.tl.g.lite{fill:var(--good);opacity:.55}
 h3 .h3s{font-family:var(--f-b);font-size:12.5px;font-weight:400;color:var(--muted);margin-left:6px}
 svg text.soc-t.out{fill:var(--ink2)} svg text.soc-t.sm{font-size:8.5px;letter-spacing:-.2px}
 svg text.soc-t{font-family:var(--f-m);font-size:9.5px;font-weight:600;fill:#fff;pointer-events:none}
+svg .bat{fill:none;stroke:#fff;stroke-width:1;pointer-events:none} svg .bat-f{fill:#fff;pointer-events:none} svg .bat.out{stroke:var(--ink2)} svg .bat-f.out{fill:var(--ink2)}
+.legend svg.bat-lg{vertical-align:-1px} .legend svg.bat-lg .bat{stroke:var(--ink2)} .legend svg.bat-lg .bat-f{fill:var(--ink2)}
 svg rect.tl{stroke:var(--surface);stroke-width:1} svg rect.tl:hover{stroke:var(--ink);stroke-width:1.5}
 svg .pat{stroke:var(--ink2);stroke-width:1.6} svg .lim{stroke:var(--warn);stroke-width:1.6;stroke-dasharray:5 4}
 svg circle.yd{stroke:var(--surface);stroke-width:2} svg circle.yd.ok{fill:var(--accent)} svg circle.yd.w{fill:var(--warn)} svg circle.yd:hover{stroke:var(--ink)}
@@ -498,6 +500,13 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             tarjetas += f'<div class="sm-card {niv}"><div class="t"><span class="ic" aria-hidden="true">{_ico[niv]}</span>{esc(v)}</div><div class="v">{len(casas)}</div><small>{esc(lista)}</small></div>'
         # línea de tiempo por casa: una barra por corte, coloreada según su veredicto
         X0, PW, RH = 96, 880, 17
+
+        def icono_bateria(ix, cy, soc, cls=""):
+            """Icono de batería (8 x 5 px) con el nivel de carga; señala que el número de la barra es el SOC y no el respaldo."""
+            nivel = max(0.0, min(1.0, soc / 100))
+            return (f'<rect class="bat {cls}" x="{ix:.1f}" y="{cy - 2.5:.1f}" width="8" height="5" rx="1"/>'
+                    f'<rect class="bat-f {cls}" x="{ix + 1.2:.1f}" y="{cy - 1.3:.1f}" width="{5.6 * nivel:.1f}" height="2.6"/>'
+                    f'<rect class="bat-f {cls}" x="{ix + 8:.1f}" y="{cy - 1.2:.1f}" width="1.3" height="2.4"/>')
         filas = sorted(_cs, key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
         span = max(1, W1 - W0)
         xt = lambda t: X0 + (min(max(t, W0), W1) - W0) / span * PW
@@ -535,17 +544,22 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                         soc_i, soc_nota = R["soc_ult"][1], f" (último dato registrado, {hb(R['soc_ult'][0])})"
                 soc_txt_c = f'SOC al inicio {soc_i:.0f} %{soc_nota}' if soc_i is not None else "SOC sin dato"
                 tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {soc_txt_c} · {c.get("veredicto") or ""}'
-                # SOC al inicio del corte, siempre dentro de la barra (decisión del usuario): "SOC 39%" si la barra es ancha,
-                # solo "39%" en letra más chica si es angosta (corte corto frente a las 24 h); solo si ni así cabe, a su derecha
+                # SOC al inicio del corte, siempre dentro de la barra (decisión del usuario) y con icono de batería para no
+                # confundirlo con el % de respaldo: icono + "SOC 39%" si la barra es ancha, icono + "39%" en letra chica,
+                # icono + "39" si es muy angosta (corte corto frente a las 24 h); solo si ni así cabe, a su derecha
                 etiqueta = ""
                 if soc_i is not None and (c["dur"] or 0) >= 300:
-                    num_soc = f'{soc_i:.0f}%{"*" if soc_nota else ""}'
-                    if w >= 52:
-                        etiqueta = f'<text class="soc-t" x="{x1 + 4:.1f}" y="{y + 12}">SOC {num_soc}</text>'
-                    elif w >= 5.2 * len(num_soc) + 3:
-                        etiqueta = f'<text class="soc-t sm" x="{x1 + 2:.1f}" y="{y + 11.5}">{num_soc}</text>'
+                    ast = "*" if soc_nota else ""
+                    dig = f'{soc_i:.0f}{ast}'
+                    cy = y + 8
+                    if w >= 62:
+                        etiqueta = icono_bateria(x1 + 3, cy, soc_i) + f'<text class="soc-t" x="{x1 + 15.5:.1f}" y="{y + 12}">SOC {dig}%</text>'
+                    elif w >= 5.2 * (len(dig) + 1) + 17:
+                        etiqueta = icono_bateria(x1 + 3, cy, soc_i) + f'<text class="soc-t sm" x="{x1 + 15.5:.1f}" y="{y + 11.5}">{dig}%</text>'
+                    elif w >= 5.2 * len(dig) + 13.5:
+                        etiqueta = icono_bateria(x1 + 1.5, cy, soc_i) + f'<text class="soc-t sm" x="{x1 + 12.3:.1f}" y="{y + 11.5}">{dig}</text>'
                     else:
-                        etiqueta = f'<text class="soc-t out" x="{x1 + w + 4:.1f}" y="{y + 12}">SOC {num_soc}</text>'
+                        etiqueta = icono_bateria(x1 + w + 4, cy, soc_i, "out") + f'<text class="soc-t out" x="{x1 + w + 16.5:.1f}" y="{y + 12}">SOC {dig}%</text>'
                 # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
                 rojos = ""
                 for h in c.get("hu") or []:
@@ -557,7 +571,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}{etiqueta}</g>')
             y += RH
         linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 8} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
-        leyenda_t = '<div class="legend"><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span><span>SOC = carga de la batería al inicio del corte (cortes de 5 min o más; * = último dato registrado)</span></div>'
+        leyenda_t = '<div class="legend"><span><svg class="bat-lg" width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><rect class="bat" x="0.5" y="0.5" width="9" height="7" rx="1.2"/><rect class="bat-f" x="2" y="2" width="3.5" height="4"/><rect class="bat-f" x="9.5" y="2.5" width="1.5" height="3"/></svg>SOC: carga de la batería al inicio del corte, no es el respaldo (cortes de 5 min o más; * = último dato registrado)</span><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span></div>'
         # baterías: SOC actual de los sistemas por debajo de 50 %, con la reserva marcada
         TODOS_V = list(RS) + list(RB)
         socs = sorted(((R["sys"]["casa"], R["soc_ult"][1]) for R in TODOS_V if R["soc_ult"]), key=lambda x: x[1])

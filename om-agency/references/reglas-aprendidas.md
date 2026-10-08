@@ -596,3 +596,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el `<h3>` queda solo como "Respaldo de cada casa en los eventos de red", sin el `<span class="h3s">`. El criterio de qué eventos entran (3 casas o más de un conjunto, o conjunto completo de menos de 3 casas) no cambia; solo queda en la nota al pie del mapa ("cada celda es el % de respaldo del corte; solo eventos de 3 casas o más de un conjunto, o de un conjunto completo de menos de 3 casas").
 
 **Dónde está el código:** los dos `<h3>` del mapa de calor (reporte diario e interrupciones) en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El SOC de la línea de tiempo lleva icono de batería
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** el porcentaje que aparece dentro de cada barra de "Cortes de red en la ventana, por casa" se confunde con el % de respaldo. Se eligió la opción de poner un icono de batería junto al número.
+
+**Cómo se aplicó:** la etiqueta del SOC al inicio del corte (cortes de 5 min o más) sigue dentro de la barra y ahora va precedida de un icono de batería con el nivel de carga: icono + "SOC 39%" si la barra es ancha (62 px o más), icono + "39%" en letra chica si es angosta, icono + "39" si es muy angosta (unos 24 px, p. ej. un corte de 30 min frente a 24 h) y, solo si ni así cabe, a su derecha. La leyenda de la gráfica pasa a ser el primer elemento y lleva el mismo icono: "SOC: carga de la batería al inicio del corte, no es el respaldo (cortes de 5 min o más; * = último dato registrado)".
+
+**Dónde está el código:** `icono_bateria` y `etiqueta` en la línea de tiempo, `leyenda_t` y las clases `.bat` / `.bat-f` en `reporte-diario/reporte_html.py`.
