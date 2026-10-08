@@ -568,3 +568,11 @@ Reportes Operativos Periódicos.
 **Instrucciones del usuario:** (1) el mapa de calor "Respaldo de cada casa en los eventos de red" solo dibuja eventos que afectaron a **3 casas o más** (criterio por número de casas, no por minutos), así que deja fuera los cortes de 1 o 2 casas (p. ej. Casa 48PC y Casa 121 CR el 7-oct). El título lo dice: "· solo eventos que afectaron a 3 casas o más; no incluye los cortes de 1 o 2 casas (microcortes)". (2) La etiqueta "SOC xx%" al inicio del corte en la línea de tiempo no se quitó: solo se ocultaba cuando la barra medía menos de 52 px (cortes cortos frente a las 24 h, como los 40 min de Turbaco). Ahora, en cortes de 5 min o más, va dentro de la barra si cabe y a su derecha si es angosta.
 
 **Dónde está el código:** `etiqueta` en la línea de tiempo y el título del mapa de calor en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El SOC al inicio del corte va siempre dentro de la barra
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** la etiqueta del SOC al inicio del corte en la línea de tiempo va **dentro de la barra** (no a su derecha). Ajusta la entrada anterior ("SOC visible en barras angostas"): ahora, en cortes de 5 min o más, se escribe "SOC 39%" si la barra mide 52 px o más; si es más angosta (corte corto frente a las 24 h), solo "39%" en letra de 8,5 px dentro de la barra; solo si ni así cabe, a su derecha como último recurso.
+
+**Dónde está el código:** `etiqueta` en la línea de tiempo de `reporte-diario/reporte_html.py`.

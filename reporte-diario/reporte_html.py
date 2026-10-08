@@ -27,7 +27,7 @@ h1 .gh{font-size:.42em;font-weight:500;color:var(--muted);white-space:nowrap}
 .sm-card small{color:var(--muted);font-size:11.5px;font-family:var(--f-m);white-space:normal}
 svg rect.tl.g{fill:var(--good)} svg rect.tl.g.lite{fill:var(--good);opacity:.55} svg rect.tl.w{fill:var(--warn)} svg rect.tl.c{fill:var(--crit)}
 h3 .h3s{font-family:var(--f-b);font-size:12.5px;font-weight:400;color:var(--muted);margin-left:6px}
-svg text.soc-t.out{fill:var(--ink2)}
+svg text.soc-t.out{fill:var(--ink2)} svg text.soc-t.sm{font-size:8.5px;letter-spacing:-.2px}
 svg text.soc-t{font-family:var(--f-m);font-size:9.5px;font-weight:600;fill:#fff;pointer-events:none}
 svg rect.tl{stroke:var(--surface);stroke-width:1} svg rect.tl:hover{stroke:var(--ink);stroke-width:1.5}
 svg .pat{stroke:var(--ink2);stroke-width:1.6} svg .lim{stroke:var(--warn);stroke-width:1.6;stroke-dasharray:5 4}
@@ -535,14 +535,17 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                         soc_i, soc_nota = R["soc_ult"][1], f" (último dato registrado, {hb(R['soc_ult'][0])})"
                 soc_txt_c = f'SOC al inicio {soc_i:.0f} %{soc_nota}' if soc_i is not None else "SOC sin dato"
                 tip = f'{s["casa"]} · {hb(c["a"])}–{"en curso" if c["b"] is None else hb(c["b"])} · sin red {fmt(c["dur"] or 0)} · la casa vio {fmt(c["perc"]) if c.get("perc") else "0 s"} · respaldo {dec(c["cob"], 1) + " %" if c.get("cob") is not None else "—"} · {soc_txt_c} · {c.get("veredicto") or ""}'
-                # SOC al inicio del corte: dentro de la barra si cabe; si la barra es angosta (corte corto frente a las 24 h), a su derecha
+                # SOC al inicio del corte, siempre dentro de la barra (decisión del usuario): "SOC 39%" si la barra es ancha,
+                # solo "39%" en letra más chica si es angosta (corte corto frente a las 24 h); solo si ni así cabe, a su derecha
                 etiqueta = ""
                 if soc_i is not None and (c["dur"] or 0) >= 300:
-                    txt_soc = f'SOC {soc_i:.0f}%{"*" if soc_nota else ""}'
+                    num_soc = f'{soc_i:.0f}%{"*" if soc_nota else ""}'
                     if w >= 52:
-                        etiqueta = f'<text class="soc-t" x="{x1 + 4:.1f}" y="{y + 12}">{txt_soc}</text>'
+                        etiqueta = f'<text class="soc-t" x="{x1 + 4:.1f}" y="{y + 12}">SOC {num_soc}</text>'
+                    elif w >= 5.2 * len(num_soc) + 3:
+                        etiqueta = f'<text class="soc-t sm" x="{x1 + 2:.1f}" y="{y + 11.5}">{num_soc}</text>'
                     else:
-                        etiqueta = f'<text class="soc-t out" x="{x1 + w + 4:.1f}" y="{y + 12}">{txt_soc}</text>'
+                        etiqueta = f'<text class="soc-t out" x="{x1 + w + 4:.1f}" y="{y + 12}">SOC {num_soc}</text>'
                 # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
                 rojos = ""
                 for h in c.get("hu") or []:
