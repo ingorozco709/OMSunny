@@ -57,6 +57,38 @@ svg circle.yd.t{fill:var(--accent);opacity:.55}
 .soc-row .soc{flex:1;min-width:0}
 """
 
+# Tooltips en pantallas táctiles: el <title> de las gráficas solo sale con el cursor; en el celular, al tocar una barra, un punto o una celda
+# se muestra el mismo texto en un recuadro flotante (se oculta al tocar en otro lado o a los 8 s). En equipos con cursor no hace nada.
+TOUCH_JS = """(function(){
+if(!window.matchMedia||!window.matchMedia('(hover: none)').matches)return;
+var tip=document.createElement('div');
+tip.setAttribute('role','tooltip');
+tip.style.cssText='position:fixed;z-index:9999;display:none;max-width:min(86vw,360px);padding:8px 10px;border-radius:6px;background:var(--ink,#14212b);color:var(--surface,#fff);font:12.5px/1.4 var(--f-b,sans-serif);box-shadow:0 2px 10px rgba(0,0,0,.3);pointer-events:none';
+document.body.appendChild(tip);
+var timer=null;
+function texto(el){
+  while(el&&el!==document.body){
+    if(el.getAttribute&&el.getAttribute('title'))return el.getAttribute('title');
+    var t=el.querySelector&&el.querySelector(':scope > title');
+    if(t&&t.textContent)return t.textContent;
+    el=el.parentNode;
+  }
+  return '';
+}
+function ocultar(){tip.style.display='none';if(timer){clearTimeout(timer);timer=null;}}
+document.addEventListener('click',function(e){
+  var tx=texto(e.target);
+  if(!tx){ocultar();return;}
+  tip.textContent=tx;tip.style.display='block';
+  var w=tip.offsetWidth,h=tip.offsetHeight,vw=window.innerWidth;
+  var x=Math.min(Math.max(8,e.clientX-w/2),vw-w-8);
+  var y=e.clientY-h-14; if(y<8)y=e.clientY+18;
+  tip.style.left=x+'px';tip.style.top=y+'px';
+  if(timer)clearTimeout(timer);timer=setTimeout(ocultar,8000);
+},true);
+window.addEventListener('scroll',ocultar,{passive:true});
+})();"""
+
 VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
 
@@ -687,7 +719,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     vio_ = sum(c.get("perc") or 0 for c in mis)
                     tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hb(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
                     shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{(dec(v, 1) if 97 <= v < 100 else dec(v, 0)) if v is not None else "—"}</text></g>')
-            grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; solo eventos con 3 casas o más</span></div>'
+            grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; solo eventos con 3 casas o más</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)
         d_ult = dias[-1][0]
         pts5 = sorted(((R, R["lleno"].get(d_ult)) for R in RS if R.get("lleno") and R["lleno"].get(d_ult) is not None), key=lambda x: x[1])
@@ -921,6 +953,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
+<script>{TOUCH_JS}</script>
 </div>
 '''
     if getattr(args, "solo_interrupciones", False):
@@ -999,6 +1032,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
+<script>{TOUCH_JS}</script>
 </div>
 '''
     with open(args.salida, "w", encoding="utf8") as f:

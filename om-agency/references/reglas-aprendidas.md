@@ -550,3 +550,13 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** quitar la hora de generación solo del **título principal** del reporte ("Operación de las últimas 24 horas"). Se mantiene en el `<title>` de la página ("Operación diaria 7 oct · 16:26") y en la línea de datos del encabezado ("Generado 16:26"). Ajusta la entrada anterior ("La hora de generación va en el título"): el h1 ya no lleva "· generado HH:MM".
 
 **Dónde está el código:** encabezado `h1` en `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — Mapa de calor a tamaño natural y tooltips táctiles
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Hallazgos del usuario (reporte del 8-oct):** (1) el mapa de calor "Respaldo de cada casa en los eventos de red" se veía enorme cuando había pocos eventos (2 columnas): el CSS `.scroll svg` fuerza `min-width` de 720 px y el SVG se escalaba 3 veces. (2) En el celular los detalles de las gráficas (el `<title>` del SVG) no aparecen al tocar una barra.
+
+**Cómo se aplicó:** el SVG del mapa de calor lleva `min-width:0` y su ancho natural en px, así que conserva la proporción del resto del reporte. Se agregó `TOUCH_JS` (script al final de la página): en pantallas sin cursor (`hover: none`), al tocar una barra, punto o celda se muestra el mismo texto del `<title>` (o del atributo `title`) en un recuadro flotante que se oculta al tocar en otro lado, al desplazarse o a los 8 s. En equipos con cursor no hace nada y siguen los tooltips nativos.
+
+**Dónde está el código:** `TOUCH_JS` y el estilo del SVG del mapa de calor en `reporte-diario/reporte_html.py`.
