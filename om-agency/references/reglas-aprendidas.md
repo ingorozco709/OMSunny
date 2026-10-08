@@ -636,3 +636,14 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** en `reporte-diario/estilos.css` la paleta oscura (`--bg:#0f1317`, `--surface:#161b20`, texto `#e7edf1`…) pasó a ser la base del `:root` con `color-scheme: dark`, y se quitaron la paleta clara y los bloques `prefers-color-scheme` / `[data-theme]`. El reporte se ve oscuro siempre, sin depender del tema del equipo o del navegador de quien lo abre. Aplica al reporte diario y al de interrupciones (comparten `estilos.css`). Las gráficas y tablas usan tokens, así que no hubo que tocar sus colores. Para volver al tema claro basta restaurar la paleta clara en el `:root` de `estilos.css` (queda en el historial de git).
 
 **Dónde está el código:** `:root` de `reporte-diario/estilos.css`.
+
+## 2026-10-08 — Interrupciones del día: estado actual y respuesta del respaldo por evento
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Solicitud del usuario:** tras una interrupción de red en Cali, "un reporte del estado actual de los sistemas y cómo se comportaron ante la interrupción en temas de respaldo".
+
+**Cómo se aplicó (`--solo-interrupciones`):** el reporte agrega, para las ciudades con cortes hoy, (1) la tabla **Estado actual de los sistemas** (todos los sistemas de la ciudad: red ahora, SOC y hora, modo del inversor `invrun` y hora, y veredicto del último corte, con la serie del inversor), (2) por cada evento de 3 o más sistemas, la tabla **Cómo respondió el respaldo** (un renglón por casa y una columna por corte del evento, ordenado de peor a mejor respaldo) con un resumen por marca, y la nota de los sistemas cuyos cortes fueron mucho más cortos que el evento (otra alimentación), y (3) una tabla de **cortes aislados** para los eventos de un solo sistema. El título lleva la ciudad cuando son una o dos.
+
+**Dónde está el código:** `R["run_ult"]` en `analizar` (`reporte-diario/reporte_diario.py`) y `sec_estado`, `sec_resp`, `sec_aisl` del bloque `solo_interrupciones` de `reporte-diario/reporte_html.py`.
+

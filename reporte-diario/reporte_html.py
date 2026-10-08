@@ -1020,7 +1020,113 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {bloque_soc}
   </div>
 </section>''' if VISUAL else ""
-        pagina = f'''<title>{esc(titulo)}</title>
+        # ---- estado actual de los sistemas de las ciudades afectadas y respuesta del respaldo en cada evento
+        _sev = {"Sin respaldo": 4, "Caída durante el respaldo": 3, "Retardo de transferencia": 2, "Respaldo total con transferencia": 1, "Respaldo total": 0}
+        _corto = {"Sin respaldo": "Sin respaldo", "Caída durante el respaldo": "Caída durante", "Retardo de transferencia": "Retardo", "Respaldo total con transferencia": "Con transferencia", "Respaldo total": "Respaldo total"}
+        _niv_v = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Retardo de transferencia": "warn", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}
+        _modo = {"normal": ("okp", "operando"), "throttled": ("okp", "operando"), "standby": ("warn", "en espera"), "activating": ("warn", "activando"), "fault": ("crit", "falla"), "alarm": ("crit", "alarma"), "shutting_down": ("warn", "apagándose")}
+        ciu_af = [c for c in ciudades if any(R["sys"]["ciudad"] == c and (R["cortes"] or R["en_curso"]) for R in RS)]
+        txt_ciu = ", ".join(c.title() for c in ciu_af)
+        filas_est = []
+        for R in sorted([R for R in RS if R["sys"]["ciudad"] in ciu_af], key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"]))):
+            s = R["sys"]
+            if R["en_curso"]:
+                red_c = _pill("crit", "sin red")
+            elif R["aislado"]:
+                red_c = _pill("warn", "inversor aislado")
+            elif not R["live"]:
+                red_c = _pill("off", "sin datos recientes")
+            else:
+                red_c = _pill("okp", "con red")
+            soc = R["soc_ult"]
+            soc_c = (_pill("crit" if soc[1] <= RESERVA else ("warn" if soc[1] <= 50 else "okp"), f"{soc[1]:.0f} %") + f"<small>{hb(soc[0])}</small>") if soc else "—"
+            ru = R.get("run_ult")
+            if ru:
+                nv_m, tx_m = _modo.get(ru[1], ("off", str(ru[1])))
+                modo_c = _pill(nv_m, tx_m) + f"<small>{esc(ru[1])} · {hb(ru[0])}</small>"
+            else:
+                modo_c = "—"
+            if R["cortes"]:
+                u_ = max(R["cortes"], key=lambda c: c["a"])
+                vr_ = u_.get("veredicto") or ""
+                vio_ = "sin hueco" if not u_.get("perc") else "vio " + fmt(u_["perc"])
+                resp_c = _pill(_niv_v.get(vr_, "off"), _corto.get(vr_, vr_)) + f"<small>{hb(u_['a'])} · {vio_}</small>"
+            else:
+                resp_c = _pill("off", "sin corte hoy")
+            filas_est.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])} · serie {esc(R["inv_name"] or "—")}</small></td><td>{red_c}</td><td class="n">{soc_c}</td><td>{modo_c}</td><td>{resp_c}</td></tr>')
+        est_head = '<th>Sistema</th><th>Red ahora</th><th class="n">Batería<br>(SOC · hora)</th><th>Inversor<br>(modo · hora)</th><th>Último corte de hoy</th>'
+        n_est_bien = sum(1 for R in RS if R["sys"]["ciudad"] in ciu_af and not R["en_curso"] and not R["aislado"] and R["live"] and (not R["soc_ult"] or R["soc_ult"][1] > 50) and (not R.get("run_ult") or R["run_ult"][1] in ("normal", "throttled")))
+        n_est_tot = sum(1 for R in RS if R["sys"]["ciudad"] in ciu_af)
+        sec_estado = (f'<section><h2>Estado actual de los sistemas · {esc(txt_ciu)}</h2><div class="card">'
+                      f'<p class="note" style="margin:0 0 10px">{n_est_bien} de {n_est_tot} sistemas están normales (con red, batería sobre 50 % y el inversor operando); '
+                      f'{len(en_curso)} sin red. Último dato del inversor: muestras cada 15 min.</p>' + tabla(est_head, filas_est, 760) + '</div></section>') if ciu_af else ""
+        sec_resp = ""
+        for e in EV:
+            if e["n"] < 3:
+                continue
+            por_R = {}
+            for R_, c_ in e["m"]:
+                por_R.setdefault(id(R_), (R_, []))[1].append(c_)
+            cnt_c = collections.Counter(len(v[1]) for v in por_R.values())
+            n_c = max(1, min(4, max(cnt_c.items(), key=lambda kv: (kv[1], kv[0]))[0]))      # columnas = nº de cortes más frecuente por sistema; los cortes extra se indican en la última columna
+            filas_r = sorted(por_R.values(), key=lambda x: (-max(_sev.get(c_.get("veredicto"), 0) for c_ in x[1]), -sum(c_["perc"] for c_ in x[1]), num_casa(x[0]["sys"]["casa"])))
+            rows_r = []
+            for R_, cs_ in filas_r:
+                cs_ = sorted(cs_, key=lambda c: c["a"])
+                s_ = R_["sys"]
+                celdas = ""
+                for i in range(n_c):
+                    if i < len(cs_):
+                        c_ = cs_[i]; vr_ = c_.get("veredicto") or ""
+                        vio_ = "sin hueco" if not c_["perc"] else "vio " + fmt(c_["perc"])
+                        celdas += f'<td>{_pill(_niv_v.get(vr_, "off"), _corto.get(vr_, vr_))}<small>{hb(c_["a"], True)} · sin red {fmt(c_["dur"] or 0)}</small><small>{vio_}</small></td>'
+                    else:
+                        celdas += "<td>—</td>"
+                mas = f"<small>+{len(cs_) - n_c} cortes más (ver detalle)</small>" if len(cs_) > n_c else ""
+                s0 = cs_[0].get("soc0"); s1 = cs_[-1].get("soc1"); sm = [c_.get("socmin") for c_ in cs_ if c_.get("socmin") is not None]
+                soc_e = ("—" if s0 is None else f"{s0:.0f}") + " → " + ("—" if s1 is None else f"{s1:.0f}") + " %"
+                rows_r.append(f'<tr><td><b>{esc(s_["casa"])}</b><small>{esc(s_["marca"].title())} {esc(s_["modelo"])} · serie {esc(R_["inv_name"] or "—")}</small></td>{celdas}<td class="n">{soc_e}{mas}</td></tr>')
+            # resumen por marca
+            marcas = {}
+            for R_, cs_ in por_R.values():
+                m_ = marcas.setdefault((R_["sys"]["marca"] or "SIN MARCA").title(), dict(sis=set(), n=0, v=collections.Counter(), vio=[]))
+                m_["sis"].add(id(R_))
+                for c_ in cs_:
+                    m_["n"] += 1; m_["v"][c_.get("veredicto")] += 1; m_["vio"].append(c_["perc"])
+            rows_m = []
+            for mk, m_ in sorted(marcas.items(), key=lambda kv: -len(kv[1]["sis"])):
+                v_ = m_["v"]
+                rows_m.append(f'<tr><td><b>{esc(mk)}</b></td><td class="n">{len(m_["sis"])}</td><td class="n">{m_["n"]}</td><td class="n">{v_["Respaldo total"]}</td><td class="n">{v_["Respaldo total con transferencia"]}</td><td class="n">{v_["Retardo de transferencia"]}</td><td class="n">{v_["Caída durante el respaldo"]}</td><td class="n">{v_["Sin respaldo"]}</td><td class="n">{fmt(st.median(m_["vio"])) if m_["vio"] else "—"}</td></tr>')
+            m_head = '<th>Marca</th><th class="n">Sistemas</th><th class="n">Cortes</th><th class="n">Respaldo<br>total</th><th class="n">Con<br>transferencia</th><th class="n">Retardo</th><th class="n">Caída<br>durante</th><th class="n">Sin<br>respaldo</th><th class="n">Tiempo que vio<br>la casa (mediana)</th>'
+            r_head = '<th>Sistema</th>' + "".join(f'<th>Corte {i + 1}<br>veredicto · inicio · sin red · tiempo que vio la casa</th>' for i in range(n_c)) + '<th class="n">SOC<br>antes → después</th>'
+            fin_e = "en curso" if e["fin"] is None else hb(e["fin"])
+            # sistemas cuyos cortes duraron mucho menos que el evento: otra alimentación (microcortes propios); se muestran pero no representan al conjunto
+            propios = [R_["sys"]["casa"] for R_, cs_ in por_R.values() if e["dur"] and e["dur"] >= 30 and max((c_["dur"] or 0) for c_ in cs_) < 0.4 * e["dur"]]
+            nota_propios = (f' {", ".join(sorted(propios, key=num_casa))} tuvieron cortes de pocos segundos, mucho más cortos que el evento: es otra alimentación con microcortes propios y no representa al conjunto de su ciudad.' if propios else "")
+            sec_resp += (f'<section><h2>Cómo respondió el respaldo · {esc(e["ciudad"].title())} {hb(e["ini"])}–{fin_e}</h2><div class="card" style="display:flex;flex-direction:column;gap:12px">'
+                         f'<p class="note" style="margin:0">{e["n"]} de {n_por_ciudad.get(e["ciudad"], 0)} sistemas afectados, {e["cortes"]} cortes. Cada columna es un corte de ese evento, en orden; el tiempo que vio la casa es el que estuvo sin tensión en el medidor solar (lado respaldado). Ordenado de peor a mejor respaldo.{esc(nota_propios)}</p>'
+                         + tabla(m_head, rows_m, 640) + tabla(r_head, rows_r, 700 + 150 * n_c) + '</div></section>')
+        # eventos de menos de 3 sistemas (cortes aislados): una sola tabla con una fila por sistema
+        rows_a = []
+        for e in EV:
+            if e["n"] >= 3:
+                continue
+            for R_, c_ in sorted(e["m"], key=lambda x: x[1]["a"]):
+                s_ = R_["sys"]; vr_ = c_.get("veredicto") or ""
+                vio_ = "sin hueco" if not c_["perc"] else "vio " + fmt(c_["perc"])
+                fin_c = "en curso" if c_["b"] is None else hb(c_["b"], True)
+                soc_a = ("—" if c_.get("soc0") is None else f'{c_["soc0"]:.0f}') + " → " + ("—" if c_.get("soc1") is None else f'{c_["soc1"]:.0f}') + " %"
+                rows_a.append(f'<tr class="{"r0" if c_["b"] is None else ""}"><td><b>{esc(s_["casa"])}</b><small>{esc(s_["ciudad"].title())} · {esc(s_["marca"].title())} {esc(s_["modelo"])} · serie {esc(R_["inv_name"] or "—")}</small></td>'
+                              f'<td>{hb(c_["a"], True)}{"≈" if c_.get("estimado") else ""} → {fin_c}<small>sin red {fmt(c_["dur"] or 0)}</small></td>'
+                              f'<td>{_pill(_niv_v.get(vr_, "off"), _corto.get(vr_, vr_))}<small>{vio_}{" · provisional: el corte sigue abierto" if c_.get("abierto") else ""}</small></td><td class="n">{soc_a}</td></tr>')
+        sec_aisl = ""
+        if rows_a:
+            a_head = '<th>Sistema</th><th>Corte<br>inicio → fin</th><th>Respaldo<br>veredicto · tiempo que vio la casa</th><th class="n">SOC<br>antes → después</th>'
+            sec_aisl = ('<section><h2>Cortes aislados (un solo sistema)</h2><div class="card" style="display:flex;flex-direction:column;gap:12px">'
+                        '<p class="note" style="margin:0">Cortes que afectaron a un solo sistema: no forman un evento de la ciudad (otra alimentación).</p>' + tabla(a_head, rows_a, 640) + '</div></section>')
+        sec_resp += sec_aisl
+        sub_ciu = f" · {txt_ciu}" if 0 < len(ciu_af) <= 2 else ""
+        pagina = f'''<title>{esc(titulo + sub_ciu)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 {css}
@@ -1028,7 +1134,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <div class="wrap">
 <header>
   <div class="kick">Hoy, hasta las {fin.strftime('%H:%M')} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
-  <h1>Interrupciones de hoy</h1>
+  <h1>Interrupciones de hoy{esc(sub_ciu)}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
 </header>
@@ -1039,6 +1145,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   {k_mal}
   {k_mx}
 </div>
+
+{sec_estado}
+
+{sec_resp}
 
 {vis_int}
 

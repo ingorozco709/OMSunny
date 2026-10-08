@@ -10,7 +10,7 @@ Ventana: martes a viernes, las últimas 24 h. Lunes, desde el viernes a las 7:00
 Variables de entorno: METRUM_API_URL, METRUM_USERNAME, METRUM_PASSWORD.
 Solo lee datos de Metrum; no escribe nada en la plataforma.
 """
-import os, sys, json, math, time, argparse, html, re, statistics as st
+import os, sys, json, math, time, argparse, html, re, collections, statistics as st
 import datetime as dt, concurrent.futures as cf, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -458,6 +458,7 @@ def analizar(s, D, W0, W1, dias):
     # --- estados del inversor
     est = []
     run = S(di, "invrun")
+    R["run_ult"] = run[-1] if run else None        # último modo del inversor (invrun) y su hora: estado actual
     for t, v in run:
         if W0 <= t <= W1 and v in ("fault", "alarm", "standby", "activating", "shutting_down"):
             est.append((t, v))
