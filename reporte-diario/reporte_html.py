@@ -1027,8 +1027,32 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         _modo = {"normal": ("okp", "operando"), "throttled": ("okp", "operando"), "standby": ("warn", "en espera"), "activating": ("warn", "activando"), "fault": ("crit", "falla"), "alarm": ("crit", "alarma"), "shutting_down": ("warn", "apagándose")}
         ciu_af = [c for c in ciudades if any(R["sys"]["ciudad"] == c and (R["cortes"] or R["en_curso"]) for R in RS)]
         txt_ciu = ", ".join(c.title() for c in ciu_af)
+        # agrupados por zona (conjunto residencial): primero la zona con más sistemas de cada ciudad
+        def _zona_nombre(z):
+            n_ = (z or "").strip().title()
+            for a_, b_ in ((" De ", " de "), (" La ", " la "), (" Del ", " del "), (" By ", " by "), ("Porton", "Portón")):
+                n_ = n_.replace(a_, b_)
+            return n_ or "Sin zona"
+        grupos_est = {}
+        for R in RS:
+            if R["sys"]["ciudad"] in ciu_af:
+                grupos_est.setdefault((R["sys"]["ciudad"], R["sys"]["zona"] or ""), []).append(R)
+        lista_est = []
+        for gk in sorted(grupos_est, key=lambda k: (ordenar_ciudad(k[0]), -len(grupos_est[k]), k[1])):
+            miembros = sorted(grupos_est[gk], key=lambda R: num_casa(R["sys"]["casa"]))
+            n_sr = sum(1 for R in miembros if R["en_curso"])
+            n_fa = sum(1 for R in miembros if R["cortes"] and max(R["cortes"], key=lambda c: c["a"]).get("veredicto") in ("Sin respaldo", "Caída durante el respaldo", "Retardo de transferencia"))
+            partes = [_pl(len(miembros), "sistema", "sistemas"), (f"{n_sr} sin red" if n_sr else "todos con red")]
+            if n_fa:
+                partes.append(f"{n_fa} con falla de respaldo en su último corte")
+            nom_z = (gk[0].title() + " · " if len(ciu_af) > 1 else "") + _zona_nombre(gk[1])
+            lista_est.append(f'<tr class="ciudad"><td colspan="5">{esc(nom_z)} <span style="font-weight:400;color:var(--ink2);font-size:12.5px">· {esc(" · ".join(partes))}</span></td></tr>')
+            lista_est.extend(miembros)
         filas_est = []
-        for R in sorted([R for R in RS if R["sys"]["ciudad"] in ciu_af], key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"]))):
+        for R in lista_est:
+            if isinstance(R, str):
+                filas_est.append(R)
+                continue
             s = R["sys"]
             if R["en_curso"]:
                 red_c = _pill("crit", "sin red")
@@ -1053,7 +1077,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 resp_c = _pill(_niv_v.get(vr_, "off"), _corto.get(vr_, vr_)) + f"<small>{hb(u_['a'])} · {vio_}</small>"
             else:
                 resp_c = _pill("off", "sin corte hoy")
-            filas_est.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])} · serie {esc(R["inv_name"] or "—")}</small></td><td>{red_c}</td><td class="n">{soc_c}</td><td>{modo_c}</td><td>{resp_c}</td></tr>')
+            filas_est.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(s["marca"].title())} {esc(s["modelo"])} · serie {esc(R["inv_name"] or "—")}</small></td><td>{red_c}</td><td class="n">{soc_c}</td><td>{modo_c}</td><td>{resp_c}</td></tr>')
         est_head = '<th>Sistema</th><th>Red ahora</th><th class="n">Batería<br>(SOC · hora)</th><th>Inversor<br>(modo · hora)</th><th>Último corte de hoy</th>'
         n_est_bien = sum(1 for R in RS if R["sys"]["ciudad"] in ciu_af and not R["en_curso"] and not R["aislado"] and R["live"] and (not R["soc_ult"] or R["soc_ult"][1] > 50) and (not R.get("run_ult") or R["run_ult"][1] in ("normal", "throttled")))
         n_est_tot = sum(1 for R in RS if R["sys"]["ciudad"] in ciu_af)

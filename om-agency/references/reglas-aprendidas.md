@@ -647,3 +647,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `R["run_ult"]` en `analizar` (`reporte-diario/reporte_diario.py`) y `sec_estado`, `sec_resp`, `sec_aisl` del bloque `solo_interrupciones` de `reporte-diario/reporte_html.py`.
 
+## 2026-10-08 — La tabla "Estado actual de los sistemas" va agrupada por zona
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Solicitud del usuario:** "en esta tabla agrúpalos por zona" (sobre la tabla Estado actual de los sistemas · Cali del reporte de interrupciones).
+
+**Cómo se aplicó:** los sistemas se agrupan por ciudad y zona (atributo `zone` del medidor, conjunto residencial). Cada grupo abre con una fila de encabezado con el nombre de la zona y un resumen: número de sistemas, cuántos siguen sin red (o "todos con red") y cuántos tuvieron una falla de respaldo en su último corte (Sin respaldo, Caída durante el respaldo o Retardo de transferencia). Las zonas van de mayor a menor número de sistemas y las casas dentro de cada zona por número. Cuando el reporte abarca más de una ciudad, el encabezado lleva la ciudad ("Barranquilla · Terra by Kaia"). La ciudad ya no se repite en el renglón de cada casa.
+
+**Dónde está el código:** `_zona_nombre`, `grupos_est` y `lista_est` en el bloque `solo_interrupciones` de `reporte-diario/reporte_html.py`.
+
