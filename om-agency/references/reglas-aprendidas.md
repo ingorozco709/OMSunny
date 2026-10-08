@@ -576,3 +576,13 @@ Reportes Operativos Periódicos.
 **Instrucción del usuario:** la etiqueta del SOC al inicio del corte en la línea de tiempo va **dentro de la barra** (no a su derecha). Ajusta la entrada anterior ("SOC visible en barras angostas"): ahora, en cortes de 5 min o más, se escribe "SOC 39%" si la barra mide 52 px o más; si es más angosta (corte corto frente a las 24 h), solo "39%" en letra de 8,5 px dentro de la barra; solo si ni así cabe, a su derecha como último recurso.
 
 **Dónde está el código:** `etiqueta` en la línea de tiempo de `reporte-diario/reporte_html.py`.
+
+## 2026-10-08 — El mapa de calor incluye los conjuntos de menos de 3 sistemas
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** el mapa de calor "Respaldo de cada casa en los eventos de red" no puede filtrar solo por "3 casas o más": Castellana Real (Casa 121 CR), Pance Campestre (Casa 48PC) y otros conjuntos tienen un único sistema y nunca aparecerían. Ajusta la entrada anterior (criterio de 3 casas).
+
+**Cómo se aplicó:** un evento entra al mapa si afectó a 3 casas o más de un mismo conjunto (zona) o, en conjuntos con menos de 3 sistemas, al conjunto completo (afectados >= min(3, tamaño del conjunto)). El tamaño del conjunto sale del atributo `zona` de los sistemas incluidos. Quedan fuera los cortes de 1 o 2 casas de un conjunto grande (p. ej. Casa 73 en Reservas de Pance). El título lo explica. El 7-oct el mapa pasó de 2 a 8 columnas e incluye la Casa 48PC (4 eventos) y la Casa 121 CR (2 eventos).
+
+**Dónde está el código:** `_entra` y `evs` del mapa de calor en `reporte-diario/reporte_html.py`.
