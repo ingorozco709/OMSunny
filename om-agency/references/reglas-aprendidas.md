@@ -657,3 +657,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `_zona_nombre`, `grupos_est` y `lista_est` en el bloque `solo_interrupciones` de `reporte-diario/reporte_html.py`.
 
+
+## 2026-10-09 — Casa 447p fuera del reporte (aún no entregada a operaciones)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "excluye la casa 447p del reporte, que aún no ha sido entregada a operaciones y me está contaminando el reporte". Reemplaza la regla anterior que la dejaba en la tabla de casas solo con baterías, en "Baterías en reserva" y en los eventos de inversor (`igf`).
+
+**Cómo se aplicó:** `exclusiones.json` tiene una clave nueva `"fuera"` (casas que no entran al reporte en ningún lugar, como los pilotos); la Casa 447p pasó de `"excluir"` a `"fuera"`. El generador ya no descarga ni analiza sus datos: no aparece en la tabla de casas solo con baterías (el desplegable no se muestra mientras no haya otras), en "Baterías en reserva", en los eventos del inversor (`igf`), en comunicación ni en ningún conteo de sistemas. El resumen JSON la lista en `excluidos` con el motivo "fuera del reporte (no entregada a operaciones)". Cuando operaciones la reciba, se quita de `"fuera"` en `exclusiones.json` y vuelve a analizarse (si sigue sin generación FV, entra a "excluir").
+
+**Dónde está el código:** `cargar_exclusiones`, `MOTIVO_FUERA` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.

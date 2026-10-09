@@ -23,7 +23,7 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 - **Veredicto en "Por sistema"**: es el del último corte de cada casa e incluye, debajo de la etiqueta, el **tiempo que vio la casa en ese corte** (suma de huecos de tensión del medidor solar asociados al corte; "0 s, sin hueco" si no hubo), quién alimenta y la causa si hubo caída.
 - **No usar** un umbral de tensión del medidor solar (p. ej. 130 V) para decidir si hay respaldo: no se cumple en todos los sistemas (Casa 99 respaldó con 119–123 V).
 - Nunca la palabra "flota": usar "conjunto de sistemas" o "portafolio Sunny".
-- Pilotos (Promigas) excluidos siempre. Casa 447p, solo baterías: excluida de generación, yield y cobertura (ver `exclusiones.json`), pero se reporta en la tabla de casas solo con baterías.
+- Pilotos (Promigas) excluidos siempre. Casas **fuera del reporte** (clave `"fuera"` de `exclusiones.json`, p. ej. una casa aún no entregada a operaciones): no aparecen en ninguna tabla, gráfica ni punto relevante, igual que los pilotos; hoy: Casa 447p. La clave `"excluir"` sigue sirviendo para sacar una casa de generación, yield y cobertura pero dejarla en la tabla de casas solo con baterías (hoy vacía).
 
 ## Estilo del reporte
 Fondo oscuro único (decisión del usuario): la paleta oscura está en el `:root` de `estilos.css` con `color-scheme: dark`; no hay variante clara ni cambia con el tema del equipo o del navegador. Los colores van siempre por tokens (`--bg`, `--surface`, `--ink`…), nunca literales.

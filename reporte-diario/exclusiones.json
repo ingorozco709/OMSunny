@@ -1,6 +1,7 @@
 {
-  "excluir": [
+  "excluir": [],
+  "incluir": [],
+  "fuera": [
     "Casa 447p"
-  ],
-  "incluir": []
+  ]
 }

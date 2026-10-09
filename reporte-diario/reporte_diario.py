@@ -225,7 +225,9 @@ def construir_sistemas(devs, attrs):
     return SYS
 
 def cargar_exclusiones():
-    """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"]} para corregir a mano la regla automática."""
+    """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"], "fuera": ["Casa Z"]}.
+    - excluir / incluir: corrigen a mano la regla automática de "sin generación FV" (las excluidas pasan a la tabla de casas solo con baterías).
+    - fuera: casas que no entran al reporte en ningún lugar (p. ej. aún no entregadas a operaciones), igual que los pilotos."""
     ruta = os.path.join(HERE, "exclusiones.json")
     try:
         with open(ruta, encoding="utf8") as f:
@@ -233,14 +235,18 @@ def cargar_exclusiones():
     except (OSError, ValueError):
         d = {}
     norm = lambda L: {str(x).strip().lower() for x in d.get(L, [])}
-    return norm("excluir"), norm("incluir")
+    return norm("excluir"), norm("incluir"), norm("fuera")
 
-def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in):
+MOTIVO_FUERA = "fuera del reporte (no entregada a operaciones)"
+
+def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in, fuera=frozenset()):
     """Devuelve el motivo por el que un sistema no entra al reporte, o None si debe incluirse.
     - Pilotos (nombre con "Piloto").
     - Casas sin generación FV: solo tienen las baterías de respaldo instaladas, así que el inversor nunca supera PV_MIN_KWH al día.
     """
     nombre = s["casa"].strip().lower()
+    if nombre in fuera:
+        return MOTIVO_FUERA
     if nombre in manual_in:
         return None
     if nombre in manual_ex:
@@ -545,14 +551,14 @@ def main():
             HMC[i] = {"CenergyAI": S(d, "CenergyAI"), "CenergyAE": S(d, "CenergyAE")}
     # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV);
     # estas últimas no suman en generación, yield, cobertura ni exportación, pero se analizan aparte (SOLO_BAT)
-    manual_ex, manual_in = cargar_exclusiones()
+    manual_ex, manual_in, fuera = cargar_exclusiones()
     EXCLUIDOS.clear()
     SOLO_BAT = []
     for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
-        m = motivo_exclusion(SYS[k], HPD, h0, dias[-1][1], manual_ex, manual_in)
+        m = motivo_exclusion(SYS[k], HPD, h0, dias[-1][1], manual_ex, manual_in, fuera)
         if m:
             EXCLUIDOS.append((k[0], SYS[k]["casa"], m))
-            if m != "piloto":
+            if m not in ("piloto", MOTIVO_FUERA):
                 SOLO_BAT.append(SYS[k])
     for ciudad, casa, _ in EXCLUIDOS:
         del SYS[(ciudad, casa)]
