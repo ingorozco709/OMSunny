@@ -677,3 +677,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el archivo `reporte-diario/logo_sunny.png` se embebe como imagen data URI (≈40 KB) como primer elemento del `<header>` del reporte diario y del de interrupciones, arriba a la izquierda, de 64 px de alto. El logo conserva su propio fondo claro (`#f2f2ef`) con esquinas redondeadas, porque su texto es oscuro y no se lee sobre el fondo oscuro de la página; la página sigue con `--bg:#0f1317`. Si falta el archivo, el reporte sale sin logo. Para cambiar el logo se reemplaza `logo_sunny.png` (mismo nombre).
 
 **Dónde está el código:** `_logo_html` / `LOGO` y los dos `<header>` en `reporte-diario/reporte_html.py`; `header img.logo` en `reporte-diario/estilos.css`.
+
+## 2026-10-09 — El logo va con fondo oscuro y en la esquina superior derecha
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "te dije que al logo le dejaras también el fondo oscuro y mejor ubícalo en el recuadro rojo" (esquina superior derecha del encabezado). Reemplaza la entrada anterior, donde el logo iba sobre un recuadro claro a la izquierda.
+
+**Cómo se aplicó:** `reporte-diario/logo_sunny_original.png` es el logo oficial (fondo claro, textos oscuros). `reporte-diario/logo_a_oscuro.py` (solo biblioteca estándar) quita el fondo (transparente) y aclara los textos, "Sunny" en turquesa claro conservando su degradado y "Powered by PROMIGAS" en gris claro; el sol naranja no cambia. El resultado es `logo_sunny.png` (≈417 × 149 px), que se embebe como data URI en el encabezado, alineado a la derecha y de 84 px de alto; el título queda en la columna izquierda. En pantallas de 760 px o menos el logo pasa encima del título (56 px de alto). La página sigue con `--bg:#0f1317`. Para actualizar el logo: reemplazar `logo_sunny_original.png` y ejecutar `python3 -I reporte-diario/logo_a_oscuro.py`.
+
+**Dónde está el código:** `_logo_html` / `LOGO` y los dos `<header>` en `reporte-diario/reporte_html.py`; reglas `header`, `header>*` y `header img.logo` en `reporte-diario/estilos.css`.
