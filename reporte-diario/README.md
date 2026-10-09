@@ -27,6 +27,7 @@ Se ejecuta de lunes a viernes a las 7:00 a. m. (hora de Bogotá). El lunes cubre
 
 ## Estilo del reporte
 Fondo oscuro único (decisión del usuario): la paleta oscura está en el `:root` de `estilos.css` con `color-scheme: dark`; no hay variante clara ni cambia con el tema del equipo o del navegador. Los colores van siempre por tokens (`--bg`, `--surface`, `--ink`…), nunca literales.
+Logo: `logo_sunny.png` (Sunny, Powered by Promigas, con su propio fondo claro) va embebido como data URI al inicio del encabezado de los reportes diario y de interrupciones (`LOGO` en `reporte_html.py`, estilo `header img.logo` en `estilos.css`); la página sigue oscura.
 `estilos.css` + `EXTRA_CSS` de `reporte_html.py` (encabezados de tablas con `<br>` y fuente 9,5 px para que no se apilen). Referencia visual: `ejemplo/reporte_2026-10-06.html` (versión publicada del 6 de octubre; su tabla de la Casa 447p y los puntos "Baterías en reserva" e "Inversores igf" se agregaron a mano y hoy los genera el script). Publicar el HTML como Artifact actualizando siempre la misma URL del reporte diario.
 
 ## Uso

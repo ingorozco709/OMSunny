@@ -667,3 +667,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `exclusiones.json` tiene una clave nueva `"fuera"` (casas que no entran al reporte en ningún lugar, como los pilotos); la Casa 447p pasó de `"excluir"` a `"fuera"`. El generador ya no descarga ni analiza sus datos: no aparece en la tabla de casas solo con baterías (el desplegable no se muestra mientras no haya otras), en "Baterías en reserva", en los eventos del inversor (`igf`), en comunicación ni en ningún conteo de sistemas. El resumen JSON la lista en `excluidos` con el motivo "fuera del reporte (no entregada a operaciones)". Cuando operaciones la reciba, se quita de `"fuera"` en `exclusiones.json` y vuelve a analizarse (si sigue sin generación FV, entra a "excluir").
 
 **Dónde está el código:** `cargar_exclusiones`, `MOTIVO_FUERA` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-10-09 — Logo Sunny (Powered by Promigas) en el encabezado de los reportes
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** agregar el logo de Sunny (Powered by Promigas) a los reportes y dejar el fondo oscuro.
+
+**Cómo se aplicó:** el archivo `reporte-diario/logo_sunny.png` se embebe como imagen data URI (≈40 KB) como primer elemento del `<header>` del reporte diario y del de interrupciones, arriba a la izquierda, de 64 px de alto. El logo conserva su propio fondo claro (`#f2f2ef`) con esquinas redondeadas, porque su texto es oscuro y no se lee sobre el fondo oscuro de la página; la página sigue con `--bg:#0f1317`. Si falta el archivo, el reporte sale sin logo. Para cambiar el logo se reemplaza `logo_sunny.png` (mismo nombre).
+
+**Dónde está el código:** `_logo_html` / `LOGO` y los dos `<header>` en `reporte-diario/reporte_html.py`; `header img.logo` en `reporte-diario/estilos.css`.

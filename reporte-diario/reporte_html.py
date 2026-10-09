@@ -96,6 +96,17 @@ window.addEventListener('scroll',ocultar,{passive:true});
 YIELD_ALERTA = 0.90  # por debajo de esta fracción del yield patrón de la región: alerta "baja vs patrón" y línea punteada de la gráfica de yield
 VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
+# logo del portafolio Sunny (Powered by Promigas), embebido como data URI al inicio del encabezado de los reportes (archivo: logo_sunny.png)
+def _logo_html():
+    import base64
+    try:
+        with open(os.path.join(HERE, "logo_sunny.png"), "rb") as f:
+            datos = f.read()
+    except OSError:
+        return ""
+    return f'<img class="logo" src="data:image/png;base64,{base64.b64encode(datos).decode()}" alt="Sunny, powered by Promigas" width="164" height="64">'
+LOGO = _logo_html()
+
 
 def _kwh(x, n=1):
     return "—" if x is None else dec(x, n)
@@ -921,6 +932,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 </style>
 <div class="wrap">
 <header>
+  {LOGO}
   <div class="kick">{'Fin de semana' if es_lunes else 'Últimas 24 horas'} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
   <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
@@ -1157,6 +1169,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 </style>
 <div class="wrap">
 <header>
+  {LOGO}
   <div class="kick">Hoy, hasta las {fin.strftime('%H:%M')} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
   <h1>Interrupciones de hoy{esc(sub_ciu)}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
