@@ -687,3 +687,15 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `reporte-diario/logo_sunny_original.png` es el logo oficial (fondo claro, textos oscuros). `reporte-diario/logo_a_oscuro.py` (solo biblioteca estándar) quita el fondo (transparente) y aclara los textos, "Sunny" en turquesa claro conservando su degradado y "Powered by PROMIGAS" en gris claro; el sol naranja no cambia. El resultado es `logo_sunny.png` (≈417 × 149 px), que se embebe como data URI en el encabezado, alineado a la derecha y de 84 px de alto; el título queda en la columna izquierda. En pantallas de 760 px o menos el logo pasa encima del título (56 px de alto). La página sigue con `--bg:#0f1317`. Para actualizar el logo: reemplazar `logo_sunny_original.png` y ejecutar `python3 -I reporte-diario/logo_a_oscuro.py`.
 
 **Dónde está el código:** `_logo_html` / `LOGO` y los dos `<header>` en `reporte-diario/reporte_html.py`; reglas `header`, `header>*` y `header img.logo` en `reporte-diario/estilos.css`.
+
+## 2026-10-09 — Logo vectorial (SVG) para que no se vea pixelado
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Observación del usuario:** "el logo se ve algo pixelado, ¿puedes mejorarle la calidad?".
+
+**Causa:** el logo oficial que se tiene es una imagen de solo 529 × 207 px, ya borrosa; al mostrarla a 84 px de alto en pantallas de alta densidad se ampliaba y se veía pixelada.
+
+**Cómo se aplicó:** se vectorizó. `reporte-diario/logo_a_vectorial.py` (usa pillow, numpy y potracer) separa el logo en el sol naranja y el texto "Sunny", los traza como curvas suaves con su degradado (naranja a amarillo, turquesa claro a azul turquesa) y escribe "Powered by PROMIGAS" como texto real (Montserrat/Segoe UI/Arial con ancho fijo, en gris claro y negrita para PROMIGAS), de modo que se ve nítido a cualquier tamaño. El resultado es `logo_sunny.svg` (≈17 KB), embebido en el encabezado como data URI; `logo_sunny.png` queda como respaldo si falta el SVG. El trazo conserva la forma del logo, pero el texto pequeño es una recomposición con una tipografía parecida, no el lockup oficial: si se consigue el logo oficial en SVG o en PNG de alta resolución, se guarda como `logo_sunny.svg` y listo.
+
+**Dónde está el código:** `_logo_html` en `reporte-diario/reporte_html.py`; `reporte-diario/logo_a_vectorial.py`.

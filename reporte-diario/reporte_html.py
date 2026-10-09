@@ -96,16 +96,19 @@ window.addEventListener('scroll',ocultar,{passive:true});
 YIELD_ALERTA = 0.90  # por debajo de esta fracción del yield patrón de la región: alerta "baja vs patrón" y línea punteada de la gráfica de yield
 VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
-# logo del portafolio Sunny (Powered by Promigas) con fondo transparente y textos claros para el fondo oscuro (logo_a_oscuro.py lo genera desde
-# logo_sunny_original.png); va embebido como data URI en la esquina superior derecha del encabezado de los reportes (archivo: logo_sunny.png)
+# logo del portafolio Sunny (Powered by Promigas) para el fondo oscuro: logo_sunny.svg (vectorial, nítido en cualquier tamaño; lo genera
+# logo_a_vectorial.py desde logo_sunny_original.png) o, si falta, logo_sunny.png (logo_a_oscuro.py); va embebido como data URI en la esquina
+# superior derecha del encabezado de los reportes
 def _logo_html():
     import base64
-    try:
-        with open(os.path.join(HERE, "logo_sunny.png"), "rb") as f:
-            datos = f.read()
-    except OSError:
-        return ""
-    return f'<img class="logo" src="data:image/png;base64,{base64.b64encode(datos).decode()}" alt="Sunny, powered by Promigas" width="235" height="84">'
+    for nombre, mime in (("logo_sunny.svg", "image/svg+xml"), ("logo_sunny.png", "image/png")):
+        try:
+            with open(os.path.join(HERE, nombre), "rb") as f:
+                datos = f.read()
+        except OSError:
+            continue
+        return f'<img class="logo" src="data:{mime};base64,{base64.b64encode(datos).decode()}" alt="Sunny, powered by Promigas" width="235" height="84">'
+    return ""
 LOGO = _logo_html()
 
 
