@@ -699,3 +699,15 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** se vectorizó. `reporte-diario/logo_a_vectorial.py` (usa pillow, numpy y potracer) separa el logo en el sol naranja y el texto "Sunny", los traza como curvas suaves con su degradado (naranja a amarillo, turquesa claro a azul turquesa) y escribe "Powered by PROMIGAS" como texto real (Montserrat/Segoe UI/Arial con ancho fijo, en gris claro y negrita para PROMIGAS), de modo que se ve nítido a cualquier tamaño. El resultado es `logo_sunny.svg` (≈17 KB), embebido en el encabezado como data URI; `logo_sunny.png` queda como respaldo si falta el SVG. El trazo conserva la forma del logo, pero el texto pequeño es una recomposición con una tipografía parecida, no el lockup oficial: si se consigue el logo oficial en SVG o en PNG de alta resolución, se guarda como `logo_sunny.svg` y listo.
 
 **Dónde está el código:** `_logo_html` en `reporte-diario/reporte_html.py`; `reporte-diario/logo_a_vectorial.py`.
+
+## 2026-10-13 — Reporte de un periodo a mano: el encabezado dice el periodo
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Solicitud del usuario:** "actualízame el reporte con los datos desde el sábado a las 00 horas hasta hoy a las 7 am" (10 oct 00:00 a 13 oct 07:00, 79 h, publicado en el mismo artifact).
+
+**Problema:** con `--inicio` distinto de 24 h, el reporte decía "Últimas 24 horas" / "Operación de las últimas 24 horas" y titulaba "Operación diaria 13 oct", aunque la ventana era de 79 h.
+
+**Cómo se aplicó:** el título de la página, el rótulo y el encabezado dependen de la ventana: lunes automático (fin de semana) y ventana de 24 h (±1,5 h) no cambian; cualquier otra ventana pasa a "Operación 10 oct al 13 oct" (título), "Periodo de 79 horas" (rótulo) y "Operación del 10 oct al 13 oct" (encabezado). La rutina diaria sigue igual ("Operación diaria 13 oct", "Operación de las últimas 24 horas"). Para pedir un periodo: `reporte_diario.py --inicio AAAA-MM-DDTHH:MM --fin AAAA-MM-DDTHH:MM`. Los días completos del periodo (00:00 a 24:00) dan la generación, el yield y la cobertura; el resto va por ventana.
+
+**Dónde está el código:** `titulo`, `rot_kick` y `rot_h1` en `generar` de `reporte-diario/reporte_html.py`.

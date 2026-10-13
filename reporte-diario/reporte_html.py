@@ -147,10 +147,17 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     segs_ex = [(d0, max(d0, W0), min(d1, W1)) for d0, d1 in dias]
     if dias and W1 > dias[-1][1]:
         segs_ex.append((dias[-1][1], dias[-1][1], W1))       # hoy, hasta la hora de corte
-    titulo = ("Operación fin de semana " if es_lunes else "Operación diaria ") + f"{fin.day} {MESES[fin.month-1]}"
     h_ini = f"{DIAS[ini.weekday()]} {ini.day} {MESES[ini.month-1]} {ini.strftime('%H:%M')}"
     h_fin = f"{DIAS[fin.weekday()]} {fin.day} {MESES[fin.month-1]} {fin.strftime('%H:%M')}"
     horas = (W1 - W0) / 3600000
+    # rótulos según la ventana: 24 h (diario), fin de semana (lunes automático) o un periodo pedido a mano (--inicio con otra duración)
+    if es_lunes:
+        titulo, rot_kick, rot_h1 = f"Operación fin de semana {fin.day} {MESES[fin.month-1]}", "Fin de semana", "Operación del fin de semana"
+    elif abs(horas - 24) < 1.5:
+        titulo, rot_kick, rot_h1 = f"Operación diaria {fin.day} {MESES[fin.month-1]}", "Últimas 24 horas", "Operación de las últimas 24 horas"
+    else:
+        _per = f"{ini.day} {MESES[ini.month-1]} al {fin.day} {MESES[fin.month-1]}"
+        titulo, rot_kick, rot_h1 = f"Operación {_per}", f"Periodo de {horas:.0f} horas", f"Operación del {_per}"
 
     # ------------------------------------------------ eventos de red
     EV = eventos_de_red(RS)
@@ -937,8 +944,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <div class="wrap">
 <header>
   {LOGO}
-  <div class="kick">{'Fin de semana' if es_lunes else 'Últimas 24 horas'} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
-  <h1>{'Operación del fin de semana' if es_lunes else 'Operación de las últimas 24 horas'}</h1>
+  <div class="kick">{rot_kick} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
+  <h1>{rot_h1}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>{horas:.0f} h de operación</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
 </header>
