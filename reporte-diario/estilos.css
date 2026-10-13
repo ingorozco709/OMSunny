@@ -45,7 +45,7 @@ svg .lbl{font-size:13.5px;font-weight:600}
 svg .sub{font-size:12px;fill:var(--muted)}
 svg .sm{font-size:12px;fill:var(--ink2)}
 svg .grid{stroke:var(--line2);stroke-width:1}
-svg .grid.dia{stroke:var(--line)} svg .ax.ax-d{fill:var(--ink2);font-weight:500}
+svg .grid.dia{stroke:var(--line)} svg .ax.ax-d{fill:var(--ink2);font-weight:500} svg .ax.ax-f{fill:var(--ink2);font-size:9.5px;font-weight:500}
 svg .lane{stroke:var(--line);stroke-width:1}
 svg .b-crit{fill:var(--crit)} svg .dash-crit{stroke:var(--crit);stroke-width:2;stroke-dasharray:5 4}
 svg .b-ser{fill:var(--ser)} svg .b-cycle{fill:var(--ser);opacity:.85}

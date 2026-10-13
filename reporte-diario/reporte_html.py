@@ -770,11 +770,16 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         casas_hm = sorted({id(R): R for e in evs for R, _ in e["m"]}.values(), key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
         grafico_hm = ""
         if evs and casas_hm:
-            CWc, CHc, LX, TY = 62, 19, 92, 40
+            CWc, CHc, LX, TY = 62, 19, 92, 54
             shm = []
+            _fecha_ev = lambda e_: (lambda f_: (f_.year, f_.month, f_.day))(fecha_bog(e_["ini"]))
             for j, e in enumerate(evs):
                 x = LX + j * CWc
-                shm.append(f'<text class="ax" x="{x + CWc / 2:.1f}" y="14" text-anchor="middle">{esc("B/quilla" if e["ciudad"].upper().startswith("BARRANQ") else e["ciudad"].title()[:9])}</text><text class="ax" x="{x + CWc / 2:.1f}" y="27" text-anchor="middle">{hb(e["ini"])}</text>')
+                f_ev = fecha_bog(e["ini"])
+                fecha_txt = f"{DIAS[f_ev.weekday()][:3]} {f_ev.day} {MESES[f_ev.month - 1]}"
+                if j and _fecha_ev(e) != _fecha_ev(evs[j - 1]):      # separador entre días distintos
+                    shm.append(f'<line class="grid dia" x1="{x}" y1="0" x2="{x}" y2="{TY + len(casas_hm) * CHc}"/>')
+                shm.append(f'<text class="ax ax-f" x="{x + CWc / 2:.1f}" y="12" text-anchor="middle">{fecha_txt}</text><text class="ax" x="{x + CWc / 2:.1f}" y="27" text-anchor="middle">{esc("B/quilla" if e["ciudad"].upper().startswith("BARRANQ") else e["ciudad"].title()[:9])}</text><text class="ax" x="{x + CWc / 2:.1f}" y="40" text-anchor="middle">{hb(e["ini"])}</text>')
             for i, R in enumerate(casas_hm):
                 yy = TY + i * CHc
                 shm.append(f'<text class="sm" x="{LX - 8}" y="{yy + 14}" text-anchor="end">{esc(R["sys"]["casa"])}</text>')
@@ -788,7 +793,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     v = min(cobs_) if cobs_ else None
                     niv = "n" if v is None else ("g" if v >= 99 else ("w" if v >= 90 else "c"))
                     vio_ = sum(c.get("perc") or 0 for c in mis)
-                    tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hb(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
+                    tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hbd(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
                     shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{(dec(v, 1) if 97 <= v < 100 else dec(v, 0)) if v is not None else "—"}</text></g>')
             grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; solo eventos de 3 casas o más de un conjunto, o de un conjunto completo de menos de 3 casas</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)

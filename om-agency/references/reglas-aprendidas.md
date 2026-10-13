@@ -739,3 +739,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `exclusiones.json` pasó a `"incluir": ["Casa 35", "Casa 57"]`, que fuerza a contarlas como sistemas con FV (generación, yield, cobertura, exportación, rendimiento). Con eso el reporte vuelve a 47 sistemas. Pendiente de vigilar: Casa 104 (4,165 kWp, balance de 0,5 a 2,3 kWh/día) tiene el mismo riesgo y hoy solo se salva por un día de 5,6 kWh del 3 de oct; cuando salga de la ventana, la regla la tomará por solo baterías. Si ocurre, agregarla a `"incluir"`.
 
 **Dónde está el código:** `motivo_exclusion` y `cargar_exclusiones` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-10-13 — El mapa de calor lleva la fecha de cada evento
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "agrégale a esta gráfica [Respaldo de cada casa en los eventos de red] la fecha de las interrupciones".
+
+**Cómo se aplicó:** cada columna del mapa de calor trae tres líneas: la fecha del evento ("sáb 10 oct"), la ciudad y la hora de inicio. Entre dos columnas de días distintos hay una línea vertical tenue. El cursor sobre una celda también muestra la fecha ("10 oct 01:13"). Aplica al reporte diario y al de interrupciones.
+
+**Dónde está el código:** bloque del mapa de calor (`grafico_hm`) en `reporte-diario/reporte_html.py` y la clase `ax-f` en `reporte-diario/estilos.css`.
