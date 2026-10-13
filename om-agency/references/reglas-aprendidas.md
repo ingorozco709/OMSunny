@@ -749,3 +749,17 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** cada columna del mapa de calor trae tres líneas: la fecha del evento ("sáb 10 oct"), la ciudad y la hora de inicio. Entre dos columnas de días distintos hay una línea vertical tenue. El cursor sobre una celda también muestra la fecha ("10 oct 01:13"). Aplica al reporte diario y al de interrupciones.
 
 **Dónde está el código:** bloque del mapa de calor (`grafico_hm`) en `reporte-diario/reporte_html.py` y la clase `ax-f` en `reporte-diario/estilos.css`.
+
+## 2026-10-13 — Casa 447p vuelve al reporte; Casa 104 forzada como sistema con FV
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "ya puedes agregar a los reportes la Casa 447p, que fue energizada totalmente desde el 8 de octubre; la Casa 104 viene operando bien, solo que tiene bajo consumo; las Casas 60p y 382p al parecer tienen problemas de comunicación por baja señal, la tendré en seguimiento". Reemplaza la entrada del 9-oct que dejaba la Casa 447p fuera del reporte.
+
+**Cómo se aplicó:**
+- `exclusiones.json`: `"fuera"` queda vacío; `"incluir"` pasa a Casa 35, Casa 57, Casa 104 y Casa 447p. La Casa 447p (Livoltek HP3-15KL2, 3,57 kWp) ya cuenta en todo: generación, yield, cobertura, exportación, baterías en reserva, eventos del inversor, comunicación y tablas. Con ella el reporte tiene 48 sistemas. La Casa 104 (4,165 kWp) se fuerza como sistema con FV porque su consumo es muy bajo (0,5 a 2,3 kWh/día de balance), sin exportación, y la regla automática la habría tomado por solo baterías en cuanto saliera de la ventana el único día con más de 5 kWh.
+- Casas 60p y 382p (Turbaco): sus fallas de comunicación se tratan como problema de señal en seguimiento del equipo; el reporte las sigue mostrando en "Comunicación y equipos" cuando el último dato supera 2 h, sin cambios en el generador.
+
+**Qué esperar:** la Casa 447p tiene aún poco historial (9 días de ventana, solo desde el 8-oct con FV), así que su yield y su "patrón propio" se estabilizan en unos días; la Casa 104 sale con "baja vs patrón" (yield muy bajo) por su bajo consumo, no por falla.
+
+**Dónde está el código:** lista en `reporte-diario/exclusiones.json`; `cargar_exclusiones` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`.
