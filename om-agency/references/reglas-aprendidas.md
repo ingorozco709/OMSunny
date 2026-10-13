@@ -727,3 +727,15 @@ Reportes Operativos Periódicos.
 **Límites:** el semáforo del respaldo sigue mirando solo el último corte de cada casa (decisión anterior); una casa con cortes anteriores fallidos y un último corte bueno aparece en "Respaldo total" y hay que leer el detalle por corte.
 
 **Dónde está el código:** `repartir_huecos`, `veredicto_respaldo` y el bloque de respaldo por corte en `reporte-diario/reporte_diario.py`; eje y etiquetas de la línea de tiempo en `reporte-diario/reporte_html.py`.
+
+## 2026-10-13 — Casas 35 y 57 siempre cuentan como sistemas con FV
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Pregunta del usuario:** "¿por qué marcaste esta casa [Casa 57] como solo con baterías?".
+
+**Causa:** no fue una decisión a mano: la regla automática de "sin generación FV" (el balance de medidores no pasa de 5 kWh/día en 5 o más días de los últimos 9, `PV_MIN_KWH` y `PV_MIN_DIAS`) las tomó por casas sin FV. La Casa 57 (Livoltek HP3-10KL2, 4,165 kWp) y la Casa 35 (3,57 kWp) sí tienen FV, pero consumen muy poco (3 a 4 kWh/día), no exportan y el inversor limita la producción cuando la batería se llena temprano. El balance de medidores mide la energía solar consumida, así que sale en 2,7 a 3,1 kWh/día (Casa 57) y 3,3 a 3,9 (Casa 35) todos los días; el contador del propio inversor marca 4,1 a 5,3 y 5,0 a 5,6 kWh/día, y la batería hace un ciclo diario entre 75 y 100 %. La Casa 35 se salvaba solo cuando la ventana de 9 días incluía un día por encima de 5 kWh, así que la clasificación saltaba de un día a otro.
+
+**Cómo se aplicó:** `exclusiones.json` pasó a `"incluir": ["Casa 35", "Casa 57"]`, que fuerza a contarlas como sistemas con FV (generación, yield, cobertura, exportación, rendimiento). Con eso el reporte vuelve a 47 sistemas. Pendiente de vigilar: Casa 104 (4,165 kWp, balance de 0,5 a 2,3 kWh/día) tiene el mismo riesgo y hoy solo se salva por un día de 5,6 kWh del 3 de oct; cuando salga de la ventana, la regla la tomará por solo baterías. Si ocurre, agregarla a `"incluir"`.
+
+**Dónde está el código:** `motivo_exclusion` y `cargar_exclusiones` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
