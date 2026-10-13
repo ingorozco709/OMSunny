@@ -711,3 +711,19 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el título de la página, el rótulo y el encabezado dependen de la ventana: lunes automático (fin de semana) y ventana de 24 h (±1,5 h) no cambian; cualquier otra ventana pasa a "Operación 10 oct al 13 oct" (título), "Periodo de 79 horas" (rótulo) y "Operación del 10 oct al 13 oct" (encabezado). La rutina diaria sigue igual ("Operación diaria 13 oct", "Operación de las últimas 24 horas"). Para pedir un periodo: `reporte_diario.py --inicio AAAA-MM-DDTHH:MM --fin AAAA-MM-DDTHH:MM`. Los días completos del periodo (00:00 a 24:00) dan la generación, el yield y la cobertura; el resto va por ventana.
 
 **Dónde está el código:** `titulo`, `rot_kick` y `rot_h1` en `generar` de `reporte-diario/reporte_html.py`.
+
+## 2026-10-13 — Cada corte de red se mide por separado (los huecos que cubren varios cortes se reparten)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "mide por individual cada corte de red y así mismo muéstralos en las gráficas". Reemplaza la regla "cada hueco cuenta en un solo corte" y descarta unir cortes cercanos.
+
+**Problema que lo motivó:** el 10-oct (Casa 121 CR) la red cayó 01:13 → 01:57, volvió 3 s y cayó otra vez 01:57 → 04:21 (y 04:22 → 04:27). La casa estuvo sin tensión 01:20 → 04:23 (3 h 03 min) con la batería en la reserva. Como el hueco se asignaba solo al corte donde empezaba, el segundo corte salía con "la casa vio 0 s" y 100 % de respaldo aunque la casa estuvo a oscuras todo ese corte; el KPI de tiempo con tensión salía inflado (88,3 % en lugar de 55,0 % para el 10 al 13 de oct).
+
+**Cómo se aplicó:** `repartir_huecos` reparte cada hueco de tensión entre los cortes que cubre, por el tiempo que cae dentro de cada uno. La cabeza del hueco va al corte de siempre (al caer, el que lo contiene o el último que terminó hasta 10 min antes). Si el hueco sigue, lo que cae dentro de los cortes siguientes cuenta en cada uno (tipo "durante", continuación) y la tensión que no vuelve con la red ya de regreso cuenta "al volver" del corte anterior. Cada tiempo se cuenta una sola vez. La caída durante el respaldo se juzga por el hueco completo (2 min o más) cuando empezó en ese corte. Los cortes nunca se unen, aunque la red vuelva solo 3 s. Resultado en la Casa 121 CR: cortes de 01:13 (14,8 %), 01:57 (0 %) y 04:22 (0 %), los tres "Caída durante el respaldo". Probado contra 262 cortes de 6 ventanas anteriores (30-sep al 8-oct): solo cambian 2 (Casa 10, 1-oct 05:58 y 06:02, un hueco que cubría dos cortes seguidos). También se corrigió el SOC al inicio del corte cuando el inversor no reportó en los 30 min previos: ahora es el último dato registrado antes del corte (marcado con *), no la primera muestra de la ventana.
+
+**Gráficas:** la línea de tiempo, el mapa de calor, el histograma de "cuánto vio la casa en cada corte" y las tablas usan el valor de cada corte. En periodos de más de 36 h, la línea de tiempo marca el eje cada 6 h con el día en cada medianoche ("dom 11") y las etiquetas de SOC a la derecha de una barra angosta se omiten si se montarían sobre la siguiente barra (el SOC sigue en el cursor).
+
+**Límites:** el semáforo del respaldo sigue mirando solo el último corte de cada casa (decisión anterior); una casa con cortes anteriores fallidos y un último corte bueno aparece en "Respaldo total" y hay que leer el detalle por corte.
+
+**Dónde está el código:** `repartir_huecos`, `veredicto_respaldo` y el bloque de respaldo por corte en `reporte-diario/reporte_diario.py`; eje y etiquetas de la línea de tiempo en `reporte-diario/reporte_html.py`.

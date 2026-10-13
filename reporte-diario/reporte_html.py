@@ -537,11 +537,18 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         y = 26
         h_svg = 26 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
         # rejilla de horas cada 3 h (referida a la hora local de Bogotá)
-        paso_g = 3600000 if span <= 18 * 3600000 else 3 * 3600000   # ventana corta (reporte del día): una línea por hora
+        # eje de horas: una línea por hora en la ventana corta (reporte del día), cada 3 h hasta 36 h y cada 6 h en periodos largos, donde la medianoche lleva el día
+        paso_g = 3600000 if span <= 18 * 3600000 else (3 * 3600000 if span <= 36 * 3600000 else 6 * 3600000)
         t_h = W0 - (W0 + 5 * 3600000) % paso_g + paso_g
+        if span > 36 * 3600000:     # periodo largo: marcas en horas locales redondas (00, 06, 12, 18) para que la medianoche lleve el día
+            t_h = ((W0 - 5 * 3600000) // paso_g) * paso_g + 5 * 3600000
+            if t_h < W0:
+                t_h += paso_g       # la marca del borde izquierdo se dibuja si el periodo empieza justo a una hora redonda (p. ej. 00:00)
         while t_h < W1:
             x = xt(t_h)
-            svg.append(f'<line class="grid" x1="{x:.1f}" y1="16" x2="{x:.1f}" y2="{h_svg - 20}"/><text class="ax" x="{x:.1f}" y="11" text-anchor="middle">{hb(t_h)}</text>')
+            _f = fecha_bog(t_h); _medianoche = span > 36 * 3600000 and _f.hour == 0 and _f.minute == 0
+            rot_h = f"{DIAS[_f.weekday()][:3]} {_f.day}" if _medianoche else hb(t_h)
+            svg.append(f'<line class="grid{" dia" if _medianoche else ""}" x1="{x:.1f}" y1="16" x2="{x:.1f}" y2="{h_svg - 20}"/><text class="ax{" ax-d" if _medianoche else ""}" x="{x:.1f}" y="11" text-anchor="middle">{rot_h}</text>')
             t_h += paso_g
         ciu_ant = None
         for R in filas:
@@ -551,7 +558,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 svg.append(f'<text class="lbl" x="4" y="{y + 11}">{esc(ciu_ant.title())}</text>')
                 y += 18
             svg.append(f'<text class="sm" x="{X0 - 8}" y="{y + 11}" text-anchor="end">{esc(s["casa"])}</text><line class="lane" x1="{X0}" y1="{y + RH - 1}" x2="{X0 + PW}" y2="{y + RH - 1}"/>')
-            for c in R["cortes"]:
+            _orden = sorted(R["cortes"], key=lambda c_: c_["a"])
+            for _i, c in enumerate(_orden):
                 b = c["b"] if c["b"] is not None else W1
                 if b < W0 or c["a"] > W1:
                     continue
@@ -559,6 +567,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 w = max(4.0, x2 - x1)
                 # SOC al inicio del corte; si no hay dato, el último dato registrado de la casa (se marca con «último dato»)
                 soc_i, soc_nota = c.get("soc0"), ""
+                if soc_i is not None and c.get("soc0_viejo"):
+                    soc_nota = f" (último dato registrado, {hb(c['soc0_t'])})"
                 if soc_i is None:
                     prev_s = [(t_, v_) for t_, v_ in (R.get("soc") or []) if v_ is not None and t_ <= c["a"]]
                     if prev_s:
@@ -582,7 +592,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     elif w >= 5.2 * len(dig) + 13.5:
                         etiqueta = icono_bateria(x1 + 1.5, cy, soc_i) + f'<text class="soc-t sm" x="{x1 + 12.3:.1f}" y="{y + 11.5}">{dig}</text>'
                     else:
-                        etiqueta = icono_bateria(x1 + w + 4, cy, soc_i, "out") + f'<text class="soc-t out" x="{x1 + w + 16.5:.1f}" y="{y + 12}">SOC {dig}%</text>'
+                        # a la derecha de la barra solo si no se monta sobre la siguiente barra de la fila (el SOC siempre está en el cursor)
+                        _sig = xt(_orden[_i + 1]["a"]) if _i + 1 < len(_orden) else X0 + PW + 8
+                        if x1 + w + 4 + 16.5 + 5.7 * (len(dig) + 5) < _sig:
+                            etiqueta = icono_bateria(x1 + w + 4, cy, soc_i, "out") + f'<text class="soc-t out" x="{x1 + w + 16.5:.1f}" y="{y + 12}">SOC {dig}%</text>'
                 # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
                 rojos = ""
                 for h in c.get("hu") or []:

@@ -310,7 +310,8 @@ def veredicto_respaldo(c, bpw, soc, W1):
     else:
         fuente = None
     hu = c.get("hu") or []
-    durante = [h for h in hu if h["tipo"] == "durante" and h["d"] >= TRANSFER_MAX]
+    # caída: hueco "durante" de 2 min o más (el tramo dentro de este corte, o el hueco completo si empezó en este corte y siguió después de que volvió la red)
+    durante = [h for h in hu if h["tipo"] == "durante" and (h["d"] >= TRANSFER_MAX or (not h.get("cont") and h.get("h_d", h["d"]) >= TRANSFER_MAX))]
     caer, n_caer = interrupcion_al_caer(hu)
     soc0 = c.get("soc0")
     cargada = soc0 is not None and soc0 > RESERVA
@@ -331,6 +332,60 @@ def veredicto_respaldo(c, bpw, soc, W1):
     else:
         v = "Respaldo total con transferencia"
     return v, fuente, causa
+
+def repartir_huecos(huecos, cortes, W1):
+    """Reparte cada hueco de tensión de la casa (medidor solar) entre los cortes de red, midiendo cada corte por separado.
+    La cabeza del hueco es del corte que le corresponde por la regla de siempre: el que empieza cerca de su inicio (al caer), si no el que lo contiene,
+    si no el último que terminó hasta 10 min antes (al reconectar). Si el hueco sigue después del fin de ese corte, lo que cae dentro de los cortes
+    siguientes cuenta en cada uno de ellos (por el tiempo que se solapa) y la tensión que sigue sin volver mientras la red ya regresó (entre cortes o
+    después del último) cuenta como "al volver" del corte anterior. Así cada tiempo del hueco se cuenta una sola vez y en el corte que lo vivió.
+    Devuelve ({id(corte): [tramos]}, [huecos sin corte]); cada tramo: dict(a, b, d en s, tipo, cont=True si continúa un hueco que empezó antes, h_d = duración total del hueco)."""
+    cs = sorted((c for c in cortes if c["a"] is not None), key=lambda c: c["a"])
+    fin = lambda c: c["b"] if c["b"] is not None else W1
+    por_corte = {id(c): [] for c in cs}
+    fuera = []
+    def tramo(c, a_, b_, tipo, cont):
+        if b_ - a_ > 0:
+            por_corte[id(c)].append(dict(a=a_, b=b_, d=(b_ - a_) / 1000, tipo=tipo, cont=cont, h_d=h_d))
+    for h in huecos:
+        ha = h["a"]; hb = h["b"] if h["b"] is not None else int(ha + h["d"] * 1000)
+        h_d = (hb - ha) / 1000   # duración total del hueco, también si se reparte entre varios cortes
+        mejor = None
+        for c in cs:
+            if abs(ha - c["a"]) <= GAP_RADIO: rango = (0, abs(ha - c["a"]))
+            elif c["a"] <= ha <= fin(c): rango = (1, 0)
+            elif fin(c) < ha <= fin(c) + 10 * 60000: rango = (2, ha - fin(c))
+            else: continue
+            if mejor is None or rango < mejor[0]:
+                mejor = (rango, c)
+        if mejor is None:
+            fuera.append(h)
+            continue
+        (kind, _), cur = mejor
+        i = cs.index(cur)
+        sig = lambda i_: cs[i_ + 1] if i_ + 1 < len(cs) and cs[i_ + 1]["a"] < hb else None
+        # cabeza del hueco: tipo por la regla de siempre; si empieza cuando el corte ya terminó (al volver, al reconectar o relojes desfasados) va entero al corte
+        if abs(ha - cur["a"]) <= GAP_RADIO: tipo = "al caer"
+        elif cur["b"] is not None and abs(ha - cur["b"]) <= GAP_RADIO: tipo = "al volver"
+        else: tipo = "durante" if (cur["b"] is None or ha < cur["b"]) else "al reconectar"
+        if ha < fin(cur):
+            fin_t = min(hb, fin(cur))
+        else:
+            nx = sig(i)
+            fin_t = min(hb, nx["a"] if nx else hb)
+        tramo(cur, ha, fin_t, tipo, False)
+        # el hueco sigue: lo que cae dentro de los cortes siguientes cuenta en cada uno; la tensión que no vuelve con la red ya de regreso es "al volver" del anterior
+        while fin_t < hb:
+            nx = sig(i)
+            if nx is None:
+                tramo(cur, fin_t, hb, "al volver", True)
+                break
+            if nx["a"] > fin_t:
+                tramo(cur, fin_t, nx["a"], "al volver", True)
+            i += 1; cur = nx
+            fin_t = min(hb, fin(cur))
+            tramo(cur, cur["a"], fin_t, "durante", True)
+    return por_corte, fuera
 
 # ------------------------------------------------------------------ análisis por sistema
 def analizar(s, D, W0, W1, dias):
@@ -415,36 +470,16 @@ def analizar(s, D, W0, W1, dias):
         huecos.append(dict(a=a, b=b, d=(fin_h - a) / 1000))
     bpw = sorted((t, v) for r in s["inv"] for t, v in S(D.get(r["id"], {}), "BattPower") if isinstance(v, (int, float)))
     # --- respaldo por corte
-    # cada hueco del medidor solar cuenta en un solo corte (regla del equipo): el que empieza cerca de su inicio (al caer), si no el que lo contiene,
-    # si no el último que terminó hasta 10 min antes. Sin esto, un hueco que empieza justo antes de un segundo corte también se sumaba al corte anterior.
-    dueno = {}
-    for h in huecos:
-        mejor = None
-        for c in cortes:
-            if c["a"] is None:
-                continue
-            fin_c = c["b"] if c["b"] is not None else W1
-            if abs(h["a"] - c["a"]) <= GAP_RADIO: rango = (0, abs(h["a"] - c["a"]))
-            elif c["a"] <= h["a"] <= fin_c: rango = (1, 0)
-            elif fin_c < h["a"] <= fin_c + 10 * 60000: rango = (2, h["a"] - fin_c)
-            else: continue
-            if mejor is None or rango < mejor[0]:
-                mejor = (rango, c)
-        if mejor:
-            dueno[id(h)] = mejor[1]
-    usados = set()
+    # cada corte de red se mide por separado: el hueco de tensión de la casa se reparte entre los cortes que cubre según el tiempo que cae dentro de cada uno
+    # (y su cabeza va al corte que le corresponde por la regla de siempre: al caer, el que lo contiene o el último que terminó hasta 10 min antes)
+    hu_por_corte, huecos_sin_corte = repartir_huecos(huecos, cortes, W1)
     for c in cortes:
         if c["a"] is None:
             c.update(dur=None, hu=[], perc=0, caer=None, volver=None, cob=None); continue
         fin_c = c["b"] if c["b"] is not None else W1
         c["a_v"] = max(c["a"], W0); c["b_v"] = min(fin_c, W1)
         c["dur"] = (c["b_v"] - c["a_v"]) / 1000
-        hu = [h for h in huecos if dueno.get(id(h)) is c]
-        for h in hu:
-            usados.add(id(h))
-            if abs(h["a"] - c["a"]) <= GAP_RADIO: h["tipo"] = "al caer"
-            elif c["b"] is not None and abs(h["a"] - c["b"]) <= GAP_RADIO: h["tipo"] = "al volver"
-            else: h["tipo"] = "durante" if (c["b"] is None or h["a"] < c["b"]) else "al reconectar"
+        hu = sorted(hu_por_corte.get(id(c), []), key=lambda h: h["a"])
         c["hu"] = hu
         c["perc"] = sum(h["d"] for h in hu)
         c["caer"] = sum(h["d"] for h in hu if h["tipo"] == "al caer")
@@ -452,14 +487,20 @@ def analizar(s, D, W0, W1, dias):
         # regla del equipo: respaldo = (tiempo medidor de red − tiempo medidor solar) / tiempo medidor de red, en cada corte (incluye los huecos al caer, a mitad y al volver)
         c["cob"] = max(0.0, 100.0 * (1 - c["perc"] / c["dur"])) if c["dur"] else None
         # batería durante el corte
-        s0 = antes(soc, c["a"]) or (soc[0] if soc else None)
+        # SOC al inicio del corte: el dato de hasta 30 min antes; si no hay (p. ej. el inversor dejó de reportar), el último dato registrado antes del corte (se marca con *)
+        s0 = antes(soc, c["a"]); c["soc0_viejo"] = False
+        if not s0:
+            prev_s = [(k, v) for k, v in soc if k <= c["a"]]
+            if prev_s:
+                s0 = prev_s[-1]; c["soc0_viejo"] = True
+        c["soc0_t"] = s0[0] if s0 else None
         en = [v for t, v in soc if c["a"] <= t <= (c["b"] if c["b"] is not None else W1)]
         s1 = despues(soc, c["b"]) if c["b"] is not None else (soc[-1] if soc else None)
         c["soc0"] = s0[1] if s0 else None; c["socmin"] = min(en) if en else None; c["soc1"] = s1[1] if s1 else None
         # veredicto de respaldo: tipo de hueco en el medidor solar + quién alimenta la casa + causa de la caída
         c["veredicto"], c["fuente"], c["causa"] = veredicto_respaldo(c, bpw, soc, W1)
     R["cortes"] = [c for c in cortes if c["a"] is not None]
-    R["huecos_fuera"] = [h for h in huecos if id(h) not in usados]
+    R["huecos_fuera"] = huecos_sin_corte
     R["huecos"] = huecos
     # --- estados del inversor
     est = []
