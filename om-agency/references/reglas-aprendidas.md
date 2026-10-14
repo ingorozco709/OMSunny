@@ -796,3 +796,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
 
+## 2026-10-14 — La línea de tiempo de cortes lleva la fecha en cada marca del eje
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "colócale la fecha también donde colocaste las horas para saber a qué días pertenecen las interrupciones" (gráfica "Cortes de red en la ventana, por casa").
+
+**Cómo se aplicó:** cada marca del eje superior lleva dos líneas: la fecha ("mar 13 oct") arriba y la hora ("08:00") debajo. Si las marcas quedan a menos de 62 px una de otra (ventanas de hasta 18 h con una marca por hora, o periodos muy largos), la fecha se pone solo en la primera marca y en cada medianoche. En periodos de más de 36 h la medianoche conserva su línea vertical más visible. El eje creció 12 px hacia abajo y el SVG tiene más margen a la derecha para que la última fecha no se corte.
+
+**Dónde está el código:** bloque del eje de horas de la línea de tiempo (`paso_g`, `fecha_en_todas`) en `reporte-diario/reporte_html.py`.
+

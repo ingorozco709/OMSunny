@@ -534,8 +534,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         span = max(1, W1 - W0)
         xt = lambda t: X0 + (min(max(t, W0), W1) - W0) / span * PW
         svg = []
-        y = 26
-        h_svg = 26 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
+        y = 38
+        h_svg = 38 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
         # rejilla de horas cada 3 h (referida a la hora local de Bogotá)
         # eje de horas: una línea por hora en la ventana corta (reporte del día), cada 3 h hasta 36 h y cada 6 h en periodos largos, donde la medianoche lleva el día
         paso_g = 3600000 if span <= 18 * 3600000 else (3 * 3600000 if span <= 36 * 3600000 else 6 * 3600000)
@@ -544,11 +544,16 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             t_h = ((W0 - 5 * 3600000) // paso_g) * paso_g + 5 * 3600000
             if t_h < W0:
                 t_h += paso_g       # la marca del borde izquierdo se dibuja si el periodo empieza justo a una hora redonda (p. ej. 00:00)
+        # cada marca lleva la hora y, encima, la fecha, para saber a qué día pertenece cada corte; si las marcas quedan muy juntas (< 62 px) la fecha va solo en la primera y en cada medianoche
+        fecha_en_todas = PW * paso_g / span >= 62
+        primera = True
         while t_h < W1:
             x = xt(t_h)
-            _f = fecha_bog(t_h); _medianoche = span > 36 * 3600000 and _f.hour == 0 and _f.minute == 0
-            rot_h = f"{DIAS[_f.weekday()][:3]} {_f.day}" if _medianoche else hb(t_h)
-            svg.append(f'<line class="grid{" dia" if _medianoche else ""}" x1="{x:.1f}" y1="16" x2="{x:.1f}" y2="{h_svg - 20}"/><text class="ax{" ax-d" if _medianoche else ""}" x="{x:.1f}" y="11" text-anchor="middle">{rot_h}</text>')
+            _f = fecha_bog(t_h); _medianoche = _f.hour == 0 and _f.minute == 0
+            _dia_g = _medianoche and span > 36 * 3600000          # en periodos largos la medianoche marca el cambio de día con una línea más visible
+            fecha_g = f'<text class="ax ax-f" x="{x:.1f}" y="11" text-anchor="middle">{DIAS[_f.weekday()][:3]} {_f.day} {MESES[_f.month - 1]}</text>' if (fecha_en_todas or primera or _medianoche) else ""
+            svg.append(f'<line class="grid{" dia" if _dia_g else ""}" x1="{x:.1f}" y1="28" x2="{x:.1f}" y2="{h_svg - 20}"/>{fecha_g}<text class="ax{" ax-d" if _dia_g else ""}" x="{x:.1f}" y="24" text-anchor="middle">{hb(t_h)}</text>')
+            primera = False
             t_h += paso_g
         ciu_ant = None
         for R in filas:
@@ -606,7 +611,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     rojos += f'<rect class="tl c" x="{hx1:.1f}" y="{y + 2}" width="{max(2.0, hx2 - hx1):.1f}" height="{RH - 5}"/>'
                 svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}{etiqueta}</g>')
             y += RH
-        linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 8} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
+        linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 32} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
         leyenda_t = '<div class="legend"><span><svg class="bat-lg" width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><rect class="bat" x="0.5" y="0.5" width="9" height="7" rx="1.2"/><rect class="bat-f" x="2" y="2" width="3.5" height="4"/><rect class="bat-f" x="9.5" y="2.5" width="1.5" height="3"/></svg>SOC: carga de la batería al inicio del corte, no es el respaldo (cortes de 5 min o más; * = último dato registrado)</span><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span></div>'
         # baterías: SOC actual de los sistemas por debajo de 50 %, con la reserva marcada
         TODOS_V = list(RS) + list(RB)
