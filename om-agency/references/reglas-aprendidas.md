@@ -786,3 +786,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** bloque del mapa de calor en `reporte-diario/reporte_html.py` (variable `evs`).
 
+## 2026-10-14 — Pruebas de comisionamiento en Turbaco (cortes de las Casas 60p, 86p y 425p descartados)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "ayer estuvieron en Turbaco haciendo pruebas de comisionamiento en esas casas que aparecen con interrupciones, entonces puedes excluirlas del reporte de interrupciones".
+
+**Cómo se aplicó:** `exclusiones.json` → `"eventos_fuera"` suma tres entradas (Casa 60p, Casa 86p y Casa 425p, 13-oct completo, motivo "Pruebas de comisionamiento en Turbaco (Prado Verde Primavera)"). Los cortes de red y los huecos de tensión de esas casas que empezaron el 13-oct no cuentan en cortes, respaldo, mapa de calor, línea de tiempo ni avisos; quedan listados en `eventos_descartados` del resumen JSON. Eran los tres cortes de Turbaco del 13-oct (08:37, 11:27 y 14:46), uno por casa, sin traslape y sin afectar a las otras 15 casas del conjunto. Las casas siguen en el reporte para todo lo demás (generación, baterías, inversores, comunicación): solo se descartan sus interrupciones de ese día.
+
+**Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+

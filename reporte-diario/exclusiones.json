@@ -13,6 +13,24 @@
       "desde": "2026-10-13T00:00",
       "hasta": "2026-10-14T00:00",
       "motivo": "Visita técnica: balanceo de cargas en el tablero del cliente (Gerona Club House)"
+    },
+    {
+      "casa": "Casa 60p",
+      "desde": "2026-10-13T00:00",
+      "hasta": "2026-10-14T00:00",
+      "motivo": "Pruebas de comisionamiento en Turbaco (Prado Verde Primavera)"
+    },
+    {
+      "casa": "Casa 86p",
+      "desde": "2026-10-13T00:00",
+      "hasta": "2026-10-14T00:00",
+      "motivo": "Pruebas de comisionamiento en Turbaco (Prado Verde Primavera)"
+    },
+    {
+      "casa": "Casa 425p",
+      "desde": "2026-10-13T00:00",
+      "hasta": "2026-10-14T00:00",
+      "motivo": "Pruebas de comisionamiento en Turbaco (Prado Verde Primavera)"
     }
   ]
 }
