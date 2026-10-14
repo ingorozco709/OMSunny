@@ -763,3 +763,15 @@ Reportes Operativos Periódicos.
 **Qué esperar:** la Casa 447p tiene aún poco historial (9 días de ventana, solo desde el 8-oct con FV), así que su yield y su "patrón propio" se estabilizan en unos días; la Casa 104 sale con "baja vs patrón" (yield muy bajo) por su bajo consumo, no por falla.
 
 **Dónde está el código:** lista en `reporte-diario/exclusiones.json`; `cargar_exclusiones` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`.
+
+## 2026-10-14 — Eventos descartados a pedido (visita técnica en Gerona Club House)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "excluye del reporte la interrupción de Gerona; ayer hubo una visita técnica para realizar un balanceo de cargas en el tablero del cliente".
+
+**Cómo se aplicó:** `exclusiones.json` tiene una clave nueva `"eventos_fuera"`: lista de `{casa, desde, hasta, motivo}` (hora de Bogotá, `hasta` excluido). Los cortes de red y los huecos de tensión de esa casa que empiezan dentro del rango se descartan al analizar la casa, así que no cuentan en cortes, respaldo, mapa de calor, línea de tiempo ni en los avisos; el resumen JSON los lista en `eventos_descartados` con su motivo. El evento de Gerona era un hueco de tensión de 20 min 27 s en la Casa 9G (13-oct 14:56, sin corte de red asociado en los medidores de red); la entrada cubre esa casa el 13-oct completo. Solo se descartan eventos de esa casa en ese día: los siguientes siguen contándose.
+
+**Cuándo aplicar lo mismo:** si el equipo avisa de una visita técnica o una intervención programada que cortó el servicio, agregar la casa, el rango de fechas y el motivo a `"eventos_fuera"`; no se quitan casas ni se tocan umbrales.
+
+**Dónde está el código:** `cargar_exclusiones`, `motivo_evento_fuera` y `EVENTOS_FUERA` / `EVENTOS_DESCARTADOS` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.

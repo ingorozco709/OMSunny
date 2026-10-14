@@ -6,5 +6,13 @@
     "Casa 104",
     "Casa 447p"
   ],
-  "fuera": []
+  "fuera": [],
+  "eventos_fuera": [
+    {
+      "casa": "Casa 9G",
+      "desde": "2026-10-13T00:00",
+      "hasta": "2026-10-14T00:00",
+      "motivo": "Visita técnica: balanceo de cargas en el tablero del cliente (Gerona Club House)"
+    }
+  ]
 }

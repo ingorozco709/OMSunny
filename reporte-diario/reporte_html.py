@@ -1249,7 +1249,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 '''
     with open(args.salida, "w", encoding="utf8") as f:
         f.write(pagina)
-    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], solo_baterias=[R["sys"]["casa"] for R in RB], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
+    resumen = dict(titulo=titulo, ventana=[h_ini, h_fin], es_lunes=es_lunes, sistemas=n_sys, excluidos=[f"{c} · {k}: {m}" for c, k, m in EXCLUIDOS], eventos_descartados=[f"{c} · {k}: {tp} del {hbd(a)} ({m})" for c, k, tp, a, m in EVENTOS_DESCARTADOS], solo_baterias=[R["sys"]["casa"] for R in RB], con_cortes=len(con_cortes), cortes=total_cortes, eventos=len(EV), en_curso=[R["sys"]["casa"] for R in en_curso],
                    pv_kwh=round(pv_total), yield_anual=round(yield_flota) if yield_flota else None, cobertura_pct=round(cob_flota, 1) if cob_flota is not None else None, exp_kwh=round(exp_tot), imp_kwh=round(imp_tot), puntos=[f"{t}: {x}" for n, t, x in P])
     with open(args.json, "w", encoding="utf8") as f:
         json.dump(resumen, f, ensure_ascii=False, indent=1)

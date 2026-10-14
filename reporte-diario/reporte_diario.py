@@ -22,6 +22,8 @@ GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al ev
 PV_MIN_KWH = 5.0                      # una casa cuyo inversor nunca pasa de este valor diario (energyPD) no tiene FV instalada: solo baterías de respaldo
 PV_MIN_DIAS = 5                       # días con dato necesarios para decidir que una casa no tiene FV
 EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
+EVENTOS_FUERA = []                    # (casa en minúsculas, desde ms, hasta ms, motivo): eventos que se descartan a pedido del usuario (p. ej. visitas técnicas); lo llena main()
+EVENTOS_DESCARTADOS = []              # (ciudad, casa, tipo, inicio ms, motivo) de lo que se descartó; lo llena analizar()
 YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
 CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
 BATERIA_LLENA_SOC = 99                # % de SOC con el que se considera la batería llena
@@ -225,9 +227,12 @@ def construir_sistemas(devs, attrs):
     return SYS
 
 def cargar_exclusiones():
-    """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"], "fuera": ["Casa Z"]}.
+    """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"], "fuera": ["Casa Z"], "eventos_fuera": [{"casa": "Casa X", "desde": "2026-10-13", "hasta": "2026-10-14", "motivo": "..."}]}.
     - excluir / incluir: corrigen a mano la regla automática de "sin generación FV" (las excluidas pasan a la tabla de casas solo con baterías).
-    - fuera: casas que no entran al reporte en ningún lugar (p. ej. aún no entregadas a operaciones), igual que los pilotos."""
+    - fuera: casas que no entran al reporte en ningún lugar (p. ej. aún no entregadas a operaciones), igual que los pilotos.
+    - eventos_fuera: cortes de red y huecos de tensión de una casa que empiezan entre desde (incluido) y hasta (excluido), en hora de Bogotá
+      ("AAAA-MM-DD" o "AAAA-MM-DDTHH:MM"); se descartan porque no son fallas (p. ej. una visita técnica que cortó el servicio a propósito).
+    Devuelve (excluir, incluir, fuera, eventos_fuera)."""
     ruta = os.path.join(HERE, "exclusiones.json")
     try:
         with open(ruta, encoding="utf8") as f:
@@ -235,7 +240,16 @@ def cargar_exclusiones():
     except (OSError, ValueError):
         d = {}
     norm = lambda L: {str(x).strip().lower() for x in d.get(L, [])}
-    return norm("excluir"), norm("incluir"), norm("fuera")
+    ev = []
+    for e in d.get("eventos_fuera", []):
+        try:
+            t0 = dt.datetime.fromisoformat(str(e["desde"]))
+            t1 = dt.datetime.fromisoformat(str(e["hasta"]))
+        except (KeyError, ValueError):
+            continue
+        ms = lambda t: ts_bog(t.year, t.month, t.day, t.hour, t.minute)
+        ev.append((str(e.get("casa", "")).strip().lower(), ms(t0), ms(t1), str(e.get("motivo", "")).strip()))
+    return norm("excluir"), norm("incluir"), norm("fuera"), ev
 
 MOTIVO_FUERA = "fuera del reporte (no entregada a operaciones)"
 
@@ -388,6 +402,15 @@ def repartir_huecos(huecos, cortes, W1):
     return por_corte, fuera
 
 # ------------------------------------------------------------------ análisis por sistema
+def motivo_evento_fuera(s, t, tipo):
+    """Motivo (o None) por el que un evento de la casa que empieza en t (ms) se descarta según eventos_fuera de exclusiones.json; deja constancia en EVENTOS_DESCARTADOS."""
+    nombre = s["casa"].strip().lower()
+    for casa, t0, t1, motivo in EVENTOS_FUERA:
+        if casa == nombre and t0 <= t < t1:
+            EVENTOS_DESCARTADOS.append((s["ciudad"], s["casa"], tipo, t, motivo))
+            return motivo or "lista manual"
+    return None
+
 def analizar(s, D, W0, W1, dias):
     """D: datos por id de dispositivo. Devuelve un dict con interrupciones, respaldo, rendimiento, exportación y comunicación."""
     inv, t_inv = elegir_activo(s["inv"], D, ["BattSOC", "voltGridA", "activityState"])
@@ -442,6 +465,8 @@ def analizar(s, D, W0, W1, dias):
         fin_c = b if b is not None else W1
         if fin_c < W0 or a > W1:
             continue
+        if motivo_evento_fuera(s, a, "corte de red"):
+            continue
         cortes.append(dict(a=a, b=b, abierto=b is None, ant=False))
     # corte en curso sin evento aún (el medidor de red sin tensión no envía eventos hasta que vuelve)
     en_curso = vg_bajo and not R["aislado"] and (red_muerto or not cortes or cortes[-1]["b"] is not None)
@@ -466,6 +491,8 @@ def analizar(s, D, W0, W1, dias):
             continue
         fin_h = b if b is not None else W1
         if fin_h < W0 or a > W1:
+            continue
+        if motivo_evento_fuera(s, a, "hueco de tensión"):
             continue
         huecos.append(dict(a=a, b=b, d=(fin_h - a) / 1000))
     bpw = sorted((t, v) for r in s["inv"] for t, v in S(D.get(r["id"], {}), "BattPower") if isinstance(v, (int, float)))
@@ -592,7 +619,9 @@ def main():
             HMC[i] = {"CenergyAI": S(d, "CenergyAI"), "CenergyAE": S(d, "CenergyAE")}
     # se excluyen los pilotos y las casas que solo tienen las baterías de respaldo (sin generación FV);
     # estas últimas no suman en generación, yield, cobertura ni exportación, pero se analizan aparte (SOLO_BAT)
-    manual_ex, manual_in, fuera = cargar_exclusiones()
+    manual_ex, manual_in, fuera, ev_fuera = cargar_exclusiones()
+    EVENTOS_FUERA[:] = ev_fuera
+    EVENTOS_DESCARTADOS.clear()
     EXCLUIDOS.clear()
     SOLO_BAT = []
     for k in sorted(SYS, key=lambda k: (ordenar_ciudad(k[0]), num_casa(k[1]))):
