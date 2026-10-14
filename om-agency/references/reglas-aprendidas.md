@@ -775,3 +775,14 @@ Reportes Operativos Periódicos.
 **Cuándo aplicar lo mismo:** si el equipo avisa de una visita técnica o una intervención programada que cortó el servicio, agregar la casa, el rango de fechas y el motivo a `"eventos_fuera"`; no se quitan casas ni se tocan umbrales.
 
 **Dónde está el código:** `cargar_exclusiones`, `motivo_evento_fuera` y `EVENTOS_FUERA` / `EVENTOS_DESCARTADOS` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-10-14 — El mapa de calor muestra todas las interrupciones
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "cambiemos esa regla y que aparezcan todas las interrupciones en esa gráfica". Reemplaza el filtro del 8-oct (eventos de 3 casas o más de un mismo conjunto, o conjunto completo de menos de 3 casas). Motivo: los cortes de Turbaco del 13-oct (Casas 60p, 86p y 425p, una casa cada vez, en un conjunto de 16) no salían en el mapa.
+
+**Cómo se aplicó:** el mapa "Respaldo de cada casa en los eventos de red" dibuja todos los eventos de la ventana, también los de una sola casa; ya no se filtra por conjunto (se quitó `_entra` y el tamaño por zona). La nota al pie dice "incluye todos los eventos de red de la ventana". Las columnas siguen con fecha, ciudad y hora; el SVG sigue con su ancho natural y desplazamiento horizontal.
+
+**Dónde está el código:** bloque del mapa de calor en `reporte-diario/reporte_html.py` (variable `evs`).
+

@@ -757,16 +757,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                        + (f'<text class="ax" x="{x + bw / 2:.1f}" y="{HH + 26}" text-anchor="middle">{hb(t_i)[:2]}</text>' if True else "") + '</g>')
         grafico_ph = f'<div class="scroll"><svg viewBox="0 0 {HX0 + HW + 10} {HH + 50}" role="img" aria-label="Casas que perdieron la red en cada hora de la ventana" style="min-width:720px"><g transform="translate(0,14)">{"".join(sph)}</g></svg></div><div class="legend"><span><i class="lg c"></i>10 casas o más</span><span><i class="lg w"></i>3 a 9 casas</span><span><i class="lg a"></i>1 o 2 casas</span><span>eje horizontal: hora local de inicio del corte; pasa el cursor para ver las casas</span></div>'
         # ---- mapa de calor: casas × eventos de red (% de respaldo del corte de la casa en cada evento)
-        # eventos que entran al mapa: los que afectaron a 3 casas o más de un mismo conjunto o, en conjuntos de menos de 3 sistemas
-        # (Castellana Real, Pance Campestre, Porton de la Rivera…), al conjunto completo; así esos sistemas también aparecen
-        from collections import Counter as _C2
-        zona_de = lambda R: (R["sys"]["ciudad"], R["sys"].get("zona"))
-        tam_zona = _C2(zona_de(R) for R in RS)
-        def _entra(e):
-            vistos = {id(R): R for R, _ in e["m"]}.values()
-            por_zona = _C2(zona_de(R) for R in vistos)
-            return any(n >= min(3, tam_zona[z]) for z, n in por_zona.items())
-        evs = sorted([e for e in EV if _entra(e)], key=lambda e: e["ini"])
+        # entran al mapa todos los eventos de red de la ventana, incluso los de una sola casa (regla del usuario, 14-oct; antes solo los de 3 casas o más de un conjunto)
+        evs = sorted(EV, key=lambda e: e["ini"])
         casas_hm = sorted({id(R): R for e in evs for R, _ in e["m"]}.values(), key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
         grafico_hm = ""
         if evs and casas_hm:
@@ -795,7 +787,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     vio_ = sum(c.get("perc") or 0 for c in mis)
                     tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hbd(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
                     shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{(dec(v, 1) if 97 <= v < 100 else dec(v, 0)) if v is not None else "—"}</text></g>')
-            grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; solo eventos de 3 casas o más de un conjunto, o de un conjunto completo de menos de 3 casas</span></div>'
+            grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; incluye todos los eventos de red de la ventana</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)
         d_ult = dias[-1][0]
         pts5 = sorted(((R, R["lleno"].get(d_ult)) for R in RS if R.get("lleno") and R["lleno"].get(d_ult) is not None), key=lambda x: x[1])
