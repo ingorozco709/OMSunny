@@ -830,3 +830,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `MICRO_CORTE_MAX`, `es_micro_corte` y `etiqueta_micro_corte` en `reporte-diario/reporte_html.py` (línea de tiempo de cortes por casa y `durante_txt`).
 
+## 2026-10-15 — El límite del micro corte incluye 1 min (60 s)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "la Casa 63 no tiene la etiqueta, valida por favor". Se validó en el reporte publicado: la Casa 63 tenía tres franjas rojas y solo la primera (hueco de 59 s a las 23:19:56) llevaba la etiqueta "Micro corte"; la del medio (23:31:00 a 23:32:00) dura 60 s exactos y quedaba fuera por el criterio "menos de 1 min". El medidor da la hora en segundos enteros, así que 59 s y 60 s no se distinguen, y la Casa 63 es la misma situación de las otras cuatro casas Deye, con los dos huecos del doble de largo (dos reinicios seguidos de unos 30 s).
+
+**Cómo se aplicó:** `es_micro_corte` pasa de `< MICRO_CORTE_MAX` a `<= MICRO_CORTE_MAX` (60 s incluido) comparando en segundos enteros, los mismos que muestra la etiqueta (el hueco de la Casa 63 dura 60,003 s con los milisegundos de los eventos, y con la comparación directa seguía sin etiqueta), en la línea de tiempo de cortes por casa y en la columna "Hueco durante" de "Detalle por corte". Un hueco de más de 60 s sigue sin etiqueta. Los huecos "al caer" y "al volver" (el de 15 s de la Casa 63 al volver la red, p. ej.) siguen sin ella: la etiqueta es solo para las interrupciones intermedias.
+
+**Dónde está el código:** `MICRO_CORTE_MAX` y `es_micro_corte` en `reporte-diario/reporte_html.py`.
+

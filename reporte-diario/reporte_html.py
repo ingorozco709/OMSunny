@@ -93,11 +93,11 @@ document.addEventListener('click',function(e){
 window.addEventListener('scroll',ocultar,{passive:true});
 })();"""
 
-MICRO_CORTE_MAX = 60    # s: un hueco de tensión a mitad del corte (tipo "durante": ni al caer ni al volver la red) de menos de esto es un "micro corte" y su franja roja lleva una etiqueta oculta (cursor o toque) con los segundos que duró
+MICRO_CORTE_MAX = 60    # s: un hueco de tensión a mitad del corte (tipo "durante": ni al caer ni al volver la red) de hasta esta duración (1 min incluido) es un "micro corte" y su franja roja lleva una etiqueta oculta (cursor o toque) con los segundos que duró; el medidor da la hora en segundos enteros, así que 59 s y 60 s no se distinguen
 
 def es_micro_corte(h):
-    """Interrupción intermedia (la casa sin tensión con la red ya caída) de menos de MICRO_CORTE_MAX segundos; se juzga por la duración total del hueco."""
-    return h.get("tipo") == "durante" and h.get("h_d", h["d"]) < MICRO_CORTE_MAX
+    """Interrupción intermedia (la casa sin tensión con la red ya caída) de MICRO_CORTE_MAX segundos o menos; se juzga por la duración total del hueco."""
+    return h.get("tipo") == "durante" and int(round(h.get("h_d", h["d"]))) <= MICRO_CORTE_MAX     # en segundos enteros, los mismos que muestra la etiqueta: el hueco de 60,003 s de la Casa 63 cuenta como 60 s
 
 def etiqueta_micro_corte(h):
     return f"Micro corte · {max(1, int(round(h.get('h_d', h['d']))))} s"
