@@ -31,6 +31,24 @@
       "desde": "2026-10-13T00:00",
       "hasta": "2026-10-14T00:00",
       "motivo": "Pruebas de comisionamiento en Turbaco (Prado Verde Primavera)"
+    },
+    {
+      "casa": "Casa 412p",
+      "desde": "2026-10-14T00:00",
+      "hasta": "2026-10-15T00:00",
+      "motivo": "Interrupciones de Turbaco excluidas a pedido (14 oct; mismo patrón de las pruebas de comisionamiento del 13 oct)"
+    },
+    {
+      "casa": "Casa 415p",
+      "desde": "2026-10-14T00:00",
+      "hasta": "2026-10-15T00:00",
+      "motivo": "Interrupciones de Turbaco excluidas a pedido (14 oct; mismo patrón de las pruebas de comisionamiento del 13 oct)"
+    },
+    {
+      "casa": "Casa 447p",
+      "desde": "2026-10-14T00:00",
+      "hasta": "2026-10-15T00:00",
+      "motivo": "Interrupciones de Turbaco excluidas a pedido (14 oct; mismo patrón de las pruebas de comisionamiento del 13 oct)"
     }
   ]
 }

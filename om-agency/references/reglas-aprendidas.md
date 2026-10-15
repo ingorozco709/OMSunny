@@ -806,3 +806,15 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** bloque del eje de horas de la línea de tiempo (`paso_g`, `fecha_en_todas`) en `reporte-diario/reporte_html.py`.
 
+## 2026-10-15 — Interrupciones de Turbaco del 14-oct excluidas (mismo patrón de las pruebas del 13-oct)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "excluye las interrupciones de Turbaco", tras avisarle que el reporte del 15-oct traía otra vez cortes de una sola casa en Turbaco, de cerca de 1 h cada uno y uno tras otro (Casa 412p 09:28, Casa 415p 11:15 y Casa 447p 14:34 y 15:27), como los de las pruebas de comisionamiento del 13-oct.
+
+**Cómo se aplicó:** `exclusiones.json` → `"eventos_fuera"` suma tres entradas (Casa 412p, Casa 415p y Casa 447p, 14-oct completo, hora de Bogotá). Se descartan sus cortes de red y sus huecos de tensión que empezaron ese día, incluido el hueco de 1 h 10 min de la Casa 447p (14:22 a 15:32), que empezó antes del corte de red y aparecía como "hueco sin corte de red asociado". Quedan en `eventos_descartados` del resumen JSON. Las casas siguen en el reporte para todo lo demás (generación, baterías, inversores, comunicación). No es una exclusión de la ciudad: solo cubre esas casas ese día. Si las pruebas siguen otro día, hay que agregar la casa, el rango de fechas y el motivo; un corte real de la red en Turbaco otro día se sigue contando.
+
+**Pendiente (no aplicado):** un hueco de tensión que empieza antes del corte de red y lo cubre (caso de la Casa 447p) no se asigna a ese corte: el corte sale con "vio 0 s" y el hueco queda como "sin corte de red asociado". Se propuso asignarlo al corte que cubre; el usuario aún no lo pidió.
+
+**Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
