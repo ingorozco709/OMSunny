@@ -818,3 +818,15 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
 
+## 2026-10-15 — Etiqueta oculta de "micro corte" en las interrupciones intermedias de menos de 1 min
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Contexto:** en el corte de Cali del 14-oct (23:18, 25 min 50 s) cinco casas Deye (63, 70, 74, 99 y 111) tuvieron una franja roja a mitad de la barra: la casa perdió la tensión unos 31 s con la red ya caída y el inversor alimentándola con batería. Los medidores de red mostraron un solo corte continuo y 0 V a las 23:30, así que no fue un regreso de la red. El hueco intermedio llegó 11 min 04 o 05 s después del primero en las cinco casas, aunque cada una perdió la red en un segundo distinto: apunta a un temporizador interno del inversor.
+
+**Instrucción del usuario:** "colócale una etiqueta oculta de micro corte (los segundos que dura) a todas esas interrupciones intermedias menores a 1 min".
+
+**Cómo se aplicó:** en la gráfica "Cortes de red en la ventana, por casa", cada hueco de tensión de tipo "durante" (a mitad del corte; ni "al caer" ni "al volver") cuya duración total es menor a `MICRO_CORTE_MAX` = 60 s lleva, sobre su franja roja, una zona sensible un poco más ancha con la etiqueta oculta "Micro corte · N s · HH:MM:SS · Casa X · interrupción intermedia con la red caída". Solo se ve al pasar el cursor o al tocar (el script de tooltips táctiles ya la muestra). La columna "Hueco durante" de "Detalle por corte" lleva la misma etiqueta como `title`. Un hueco de 60 s exactos o más no la lleva. No cambia el veredicto de respaldo: sigue pasando a "Caída durante el respaldo" solo si el hueco intermedio dura 2 min o más. Los huecos "al caer" y "al volver" no llevan etiqueta, aunque un primer hueco que empieza más de 75 s después de caer la red (Casas 63 y 70) se clasifica como intermedio y sí la lleva.
+
+**Dónde está el código:** `MICRO_CORTE_MAX`, `es_micro_corte` y `etiqueta_micro_corte` en `reporte-diario/reporte_html.py` (línea de tiempo de cortes por casa y `durante_txt`).
+

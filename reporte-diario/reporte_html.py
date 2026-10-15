@@ -93,6 +93,15 @@ document.addEventListener('click',function(e){
 window.addEventListener('scroll',ocultar,{passive:true});
 })();"""
 
+MICRO_CORTE_MAX = 60    # s: un hueco de tensión a mitad del corte (tipo "durante": ni al caer ni al volver la red) de menos de esto es un "micro corte" y su franja roja lleva una etiqueta oculta (cursor o toque) con los segundos que duró
+
+def es_micro_corte(h):
+    """Interrupción intermedia (la casa sin tensión con la red ya caída) de menos de MICRO_CORTE_MAX segundos; se juzga por la duración total del hueco."""
+    return h.get("tipo") == "durante" and h.get("h_d", h["d"]) < MICRO_CORTE_MAX
+
+def etiqueta_micro_corte(h):
+    return f"Micro corte · {max(1, int(round(h.get('h_d', h['d']))))} s"
+
 YIELD_ALERTA = 0.90  # por debajo de esta fracción del yield patrón de la región: alerta "baja vs patrón" y línea punteada de la gráfica de yield
 VISUAL = True       # panel gráfico "Vista rápida" (semáforo, línea de tiempo, baterías y yield); False lo quita
 
@@ -437,7 +446,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     def durante_txt(c):
         """Huecos de tensión a mitad del corte (ni al caer ni al volver la red): duración y hora de inicio de cada uno."""
         hs = [h for h in (c.get("hu") or []) if h.get("tipo") == "durante"]
-        return "<br>".join(f'{fmt(h["d"])}<small>{hb(h["a"])}</small>' for h in hs) if hs else "—"
+        return "<br>".join((f'<span title="{esc(etiqueta_micro_corte(h))}">{fmt(h["d"])}</span>' if es_micro_corte(h) else fmt(h["d"])) + f'<small>{hb(h["a"])}</small>' for h in hs) if hs else "—"
     rows = []
     for R in con_cortes:
         for c in sorted(R["cortes"], key=lambda c: c["a"]):
@@ -602,14 +611,20 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                         if x1 + w + 4 + 16.5 + 5.7 * (len(dig) + 5) < _sig:
                             etiqueta = icono_bateria(x1 + w + 4, cy, soc_i, "out") + f'<text class="soc-t out" x="{x1 + w + 16.5:.1f}" y="{y + 12}">SOC {dig}%</text>'
                 # barra combinada: toda la barra es el tiempo sin red (verde = respaldado); en rojo, los tramos que vio el cliente (huecos de tensión)
-                rojos = ""
+                rojos, micros = "", ""
                 for h in c.get("hu") or []:
                     hu_fin = h["b"] if h.get("b") else h["a"] + int(h["d"] * 1000)
                     if hu_fin < W0 or h["a"] > W1:
                         continue
                     hx1, hx2 = xt(h["a"]), xt(hu_fin)
-                    rojos += f'<rect class="tl c" x="{hx1:.1f}" y="{y + 2}" width="{max(2.0, hx2 - hx1):.1f}" height="{RH - 5}"/>'
-                svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}{etiqueta}</g>')
+                    wr = max(2.0, hx2 - hx1)
+                    rojos += f'<rect class="tl c" x="{hx1:.1f}" y="{y + 2}" width="{wr:.1f}" height="{RH - 5}"/>'
+                    if es_micro_corte(h):
+                        # etiqueta oculta (solo al pasar el cursor o tocar): "Micro corte · N s"; la zona sensible es más ancha que la franja para poder apuntarle
+                        hw = max(6.0, wr + 3)
+                        micros += (f'<g class="mc"><title>{esc(etiqueta_micro_corte(h))} · {hb(h["a"], True)} · {esc(s["casa"])} · interrupción intermedia con la red caída</title>'
+                                   f'<rect class="hit" x="{hx1 + wr / 2 - hw / 2:.1f}" y="{y + 2}" width="{hw:.1f}" height="{RH - 5}"/></g>')
+                svg.append(f'<g class="tg"><title>{esc(tip)}</title><rect class="tl g" x="{x1:.1f}" y="{y + 2}" width="{w:.1f}" height="{RH - 5}" rx="2"/>{rojos}{etiqueta}{micros}</g>')
             y += RH
         linea_t = f'<div class="scroll"><svg viewBox="0 0 {X0 + PW + 32} {h_svg}" role="img" aria-label="Cortes de red por casa en la ventana, coloreados por veredicto de respaldo" style="min-width:760px">{"".join(svg)}</svg></div>'
         leyenda_t = '<div class="legend"><span><svg class="bat-lg" width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><rect class="bat" x="0.5" y="0.5" width="9" height="7" rx="1.2"/><rect class="bat-f" x="2" y="2" width="3.5" height="4"/><rect class="bat-f" x="9.5" y="2.5" width="1.5" height="3"/></svg>SOC: carga de la batería al inicio del corte, no es el respaldo (cortes de 5 min o más; * = último dato registrado)</span><span><i class="lg g"></i>✓ Tiempo respaldado (la casa tuvo tensión)</span><span><i class="lg c"></i>✕ Tiempo que vio el cliente (sin tensión)</span><span>la barra completa es el tiempo total sin red</span></div>'
