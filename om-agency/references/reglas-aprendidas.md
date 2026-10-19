@@ -840,3 +840,13 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `MICRO_CORTE_MAX` y `es_micro_corte` en `reporte-diario/reporte_html.py`.
 
+## 2026-10-18 — Balanceo de cargas en la Casa 121 CR (viernes 16-oct): huecos de tensión descartados
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "para que lo tengas en cuenta en el reporte de mañana: en la Casa 121 CR estuvimos haciendo balanceo de cargas el viernes para evitar el disparo de la protección de carga del sistema". Se refiere a los tres huecos de tensión del viernes 16-oct que el análisis del fin de semana había marcado como "sin corte de red asociado": 11:41 (19 s), 12:26 a 12:38 (11 min 57 s) y 13:23 a 13:31 (7 min 33 s), con el medidor de red en 124 V y el inversor encendido.
+
+**Cómo se aplicó:** `exclusiones.json` → `"eventos_fuera"` suma una entrada para la Casa 121 CR con el 16-oct completo (hora de Bogotá; motivo "Balanceo de cargas en la casa el viernes 16 oct, para evitar el disparo de la protección de carga del sistema"). Los cortes de red y huecos de tensión de esa casa que empiecen ese día no cuentan en el reporte (el del lunes 19-oct, que va desde el viernes 07:00, los trae) y quedan en `eventos_descartados` del resumen JSON. La casa sigue en el reporte para todo lo demás. Mismo tratamiento que la visita técnica de Gerona (13-oct) y las pruebas de Turbaco.
+
+**Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
