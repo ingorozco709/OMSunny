@@ -850,3 +850,22 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
 
+## 2026-10-20 — Casas nuevas en pruebas y estabilización: fuera del reporte hasta que el usuario lo pida (Casa 101)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "La Casa 101 es nueva y aún no se ha entregado a operaciones, por favor sácala del reporte; cuando identifiques que son casas nuevas no las incluyas en el reporte hasta que yo te lo pida, porque son sistemas que energizan pero están en etapa de pruebas y estabilización".
+
+**Qué la originó:** el reporte del 20-oct (publicado a las 07:00) salió con 49 sistemas en vez de 48: apareció la Casa 101 (Terra by Kaia, Barranquilla), nueva en Metrum (su inversor reporta desde el 19-oct ~16:00 y el medidor de red desde el 17-oct; sin marca, modelo ni capacidad en los atributos y sin kWp en `potencia_instalada.json`). Entraba al reporte con tres cortes (dos sin respaldo, con SOC de 6 % y 12 %), `igf` ×3, batería en reserva y la mayor exportación (1,81 kWh): todo de una casa en pruebas.
+
+**Cómo se aplicó:**
+- `exclusiones.json` → `"fuera": ["Casa 101"]`.
+- Regla general (`MOTIVO_NUEVA` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`): toda casa que Metrum tiene y que no está en `potencia_instalada.json` (el registro de las casas en operación) se trata como casa nueva y queda fuera del reporte: no se analiza y aparece en `excluidos` del resumen JSON con el motivo "casa nueva en pruebas y estabilización". `"incluir"` la deja entrar aunque no tenga kWp. Si `potencia_instalada.json` no carga, la regla no se aplica (no se saca a todas las casas). Probado con datos del 20-oct: sin la entrada manual, la Casa 101 sale como casa nueva (48 sistemas); con `"incluir"` entra (49).
+- Al revisar el resumen, `sistemas` debe ser 48 (más las casas que el usuario haya pedido incluir). Las casas nuevas excluidas se mencionan en una sola línea al final de la respuesta, para que el usuario decida cuándo incluirlas; no se incluyen por iniciativa propia.
+- Para incluir una casa nueva cuando el usuario lo pida: quitarla de `"fuera"` (si está), agregar su kWp a `potencia_instalada.json` (o ponerla en `"incluir"` si aún no hay kWp) y actualizar el número de sistemas esperado en la rutina. Al actualizar `potencia_instalada.json` con un archivo nuevo del usuario no se agregan las casas nuevas que él no haya pedido incluir.
+- Mismo criterio para el tablero de baterías (artifact aparte): no incluye casas nuevas.
+
+**Efecto con los datos del 20-oct:** el reporte pasa de 49 a 48 sistemas; los cortes, de 10 en 4 eventos a 7 en 3 (la Casa 101 aportaba tres); y el respaldo global, de 20,2 % a 2,1 %, porque queda dominado por el corte de 1 h 52 min de la Casa 12 (0 % de respaldo).
+
+**Dónde está el código:** `MOTIVO_NUEVA`, `motivo_exclusion` y `main` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+

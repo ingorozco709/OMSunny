@@ -6,7 +6,9 @@
     "Casa 104",
     "Casa 447p"
   ],
-  "fuera": [],
+  "fuera": [
+    "Casa 101"
+  ],
   "eventos_fuera": [
     {
       "casa": "Casa 9G",

@@ -229,7 +229,8 @@ def construir_sistemas(devs, attrs):
 def cargar_exclusiones():
     """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"], "fuera": ["Casa Z"], "eventos_fuera": [{"casa": "Casa X", "desde": "2026-10-13", "hasta": "2026-10-14", "motivo": "..."}]}.
     - excluir / incluir: corrigen a mano la regla automática de "sin generación FV" (las excluidas pasan a la tabla de casas solo con baterías).
-    - fuera: casas que no entran al reporte en ningún lugar (p. ej. aún no entregadas a operaciones), igual que los pilotos.
+      "incluir" también deja entrar a una casa nueva que aún no tiene kWp en potencia_instalada.json (ver MOTIVO_NUEVA).
+    - fuera: casas que no entran al reporte en ningún lugar (p. ej. nuevas en pruebas o aún no entregadas a operaciones), igual que los pilotos.
     - eventos_fuera: cortes de red y huecos de tensión de una casa que empiezan entre desde (incluido) y hasta (excluido), en hora de Bogotá
       ("AAAA-MM-DD" o "AAAA-MM-DDTHH:MM"); se descartan porque no son fallas (p. ej. una visita técnica que cortó el servicio a propósito).
     Devuelve (excluir, incluir, fuera, eventos_fuera)."""
@@ -252,10 +253,13 @@ def cargar_exclusiones():
     return norm("excluir"), norm("incluir"), norm("fuera"), ev
 
 MOTIVO_FUERA = "fuera del reporte (no entregada a operaciones)"
+MOTIVO_NUEVA = "casa nueva en pruebas y estabilización (sin kWp registrado): fuera del reporte hasta que el usuario pida incluirla"
 
 def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in, fuera=frozenset()):
     """Devuelve el motivo por el que un sistema no entra al reporte, o None si debe incluirse.
     - Pilotos (nombre con "Piloto").
+    - Casas nuevas: las que energizan pero siguen en pruebas y estabilización no entran hasta que el usuario lo pida. Es nueva toda casa
+      que Metrum tiene y que no está en potencia_instalada.json (el registro de las casas en operación); "incluir" la deja entrar.
     - Casas sin generación FV: solo tienen las baterías de respaldo instaladas, así que el inversor nunca supera PV_MIN_KWH al día.
     """
     nombre = s["casa"].strip().lower()
@@ -267,6 +271,8 @@ def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in, fuera=frozenset
         return "lista manual"
     if "piloto" in nombre:
         return "piloto"
+    if KWP and nombre not in KWP:      # sin el registro cargado (KWP vacío) no se puede saber qué casa es nueva
+        return MOTIVO_NUEVA
     dias_dato = {}
     for d0 in range(d_ini, d_fin, 86400000):
         b = bal_dia(s, d0, d0 + 86400000)
@@ -628,7 +634,7 @@ def main():
         m = motivo_exclusion(SYS[k], HPD, h0, dias[-1][1], manual_ex, manual_in, fuera)
         if m:
             EXCLUIDOS.append((k[0], SYS[k]["casa"], m))
-            if m not in ("piloto", MOTIVO_FUERA):
+            if m not in ("piloto", MOTIVO_FUERA, MOTIVO_NUEVA):
                 SOLO_BAT.append(SYS[k])
     for ciudad, casa, _ in EXCLUIDOS:
         del SYS[(ciudad, casa)]
