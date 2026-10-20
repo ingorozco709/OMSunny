@@ -869,3 +869,14 @@ Reportes Operativos Periódicos.
 
 **Dónde está el código:** `MOTIVO_NUEVA`, `motivo_exclusion` y `main` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
 
+## 2026-10-20 — Casa 435p: falla despejada el 19-oct; sigue con problemas de comunicación (en seguimiento del equipo)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Aviso del usuario:** "Ayer se despejó la falla de la Casa 435p, pero sigue con problemas de comunicación". La telemetría de Metrum lo confirma: el inversor (Livoltek HP3-10KL2) estuvo en falla del 19-oct 02:15 al 17:45 (eventos `igf` de 02:00 a 17:30) y desde las 17:45 reporta modo normal. La comunicación del sitio (Turbaco, Prado Verde Primavera) es inestable: caídas del enlace del gateway, del medidor de red, del medidor solar y del inversor el 18 y el 19-oct, y fuera de línea desde el 20-oct 06:29 (último dato del inversor 05:45, con la batería en 13 %).
+
+**Cómo se aplica:**
+- La Casa 435p ya no se presenta como inversor en falla. El reporte del 20-oct la listó en "Inversores" (igf ×38) solo porque esos eventos caen dentro de su ventana (19-oct 07:00 a 20-oct 07:00); el punto cuenta los estados de falla de la ventana, no el estado actual. Si vuelve a reportar `fault` o `alarm` después del 19-oct 17:45, se informa como una falla nueva.
+- Su problema de comunicación se trata igual que el de las Casas 60p y 382p: está en seguimiento del equipo y, si aparece sin datos, se dice en una línea al final del resumen, sin pedir acciones. A diferencia de ellas, el usuario no ha dicho que la causa sea baja señal; no se afirma una causa.
+- Sin cambios en el generador. La nota quedó también en el texto de la rutina diaria.
+
