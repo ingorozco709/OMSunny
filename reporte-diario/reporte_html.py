@@ -131,7 +131,7 @@ METAS = {                          # metas de los indicadores del resumen; None 
     "generacion": "patron",        # kWh: mediana de la generación total de los días previos (patrón del portafolio)
     "yield": "patron",             # kWh/kWp·año: yield patrón de la región (Cali / costa) ponderado por la kWp de cada región
     "cobertura": 90.0,             # % de cobertura solar (generación FV ÷ consumo de los clientes): meta dada por el usuario
-    "exportacion": 30.0,           # kWh al mes (tope): energía activa exportada acumulada del mes en curso, de todo el portafolio (por confirmar)
+    "exportacion": 30.0,           # kWh al mes (tope) de todo el portafolio: el medidor de las últimas 24 h usa su parte diaria (tope ÷ días del mes) y el acumulado del mes queda como texto (por confirmar)
 }
 
 EXTRA_CSS += """
@@ -151,7 +151,7 @@ EXTRA_CSS += """
 .g-rm>div{display:flex;flex-direction:column;gap:1px;min-width:0}
 .g-rm dt{display:flex;align-items:center;gap:6px;font-family:var(--f-m);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .g-rm dd{margin:0;font-size:15px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.g-rm dd small{font-size:12px;font-weight:400;color:var(--ink2)}
+.g-rm dd small{font-size:12px;font-weight:400;color:var(--ink2);white-space:nowrap}
 .k-real{width:9px;height:9px;border-radius:50%;background:var(--gc);display:inline-block}
 .k-meta{width:3px;height:12px;border-radius:1px;background:var(--ink);display:inline-block}
 .g-d{grid-area:d;margin:0;font-size:12.5px;line-height:1.4;color:var(--ink2);text-align:center;max-width:34ch}
@@ -170,7 +170,7 @@ EXTRA_CSS += """
 @media (max-width:440px){
   .gcard{grid-template-columns:136px minmax(0,1fr);grid-template-areas:"fig t" "fig st" "fig rm" "d d";justify-items:start;align-items:center;column-gap:12px;padding:12px 14px}
   .g-rm{grid-template-columns:1fr 1fr;gap:4px 10px;max-width:none}
-  .g-rm dd{font-size:14px}
+  .g-rm dd{font-size:13px}
   .g-st{text-align:left}
   .g-d{text-align:left;max-width:none}
 }
@@ -532,37 +532,41 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             (dec(cob_flota, 1) + " %") if cob_flota is not None else "—", "≥ " + dec(meta_cb, 0) + " %", "Generación FV ÷ consumo de los clientes.",
             f"Cobertura solar: {dec(cob_flota, 1) if cob_flota is not None else '—'} % del consumo de los clientes{_txt_cob}. Meta: {dec(meta_cb, 0)} % o más.", ("0 %", "100 %"),
             f"Generación FV ÷ consumo de los clientes{_txt_cob}. La generación es el balance de medidores y el consumo es la demanda del medidor solar. Meta: {dec(meta_cb, 0)} % o más; la marca tenue es el 90 % de la meta ({dec(0.9 * meta_cb, 0)} %), debajo de la cual el resultado pasa de ámbar a naranja.")
-    # 6) energía activa exportada acumulada del mes frente al tope mensual
+    # 6) energía activa exportada en la ventana frente a su parte del tope mensual (reparto lineal entre los días del mes); el acumulado del mes queda como texto
     import calendar
-    meta_ex = METAS["exportacion"]
+    meta_ex = METAS["exportacion"]                            # kWh al mes, de todo el portafolio
     fin_m = fin - dt.timedelta(minutes=1) if (fin.hour == 0 and fin.minute == 0) else fin
     mes0_ = ts_bog(fin_m.year, fin_m.month, 1)
     dias_mes = calendar.monthrange(fin_m.year, fin_m.month)[1]
     dias_tr = max((W1 - mes0_) / 86400000, 1 / 24)
+    dias_v = (W1 - W0) / 86400000                             # largo de la ventana en días: 1 en el diario, 3 el lunes
+    h_v = int(round(dias_v * 24))
+    dv_txt = dec(dias_v, 0) if abs(dias_v - round(dias_v)) < 0.01 else dec(dias_v, 1)
+    meta_v = meta_ex * dias_v / dias_mes                      # parte del tope mensual que le toca a la ventana
+    n_et = sum(1 for R in RS if R["exp"].get("total") is not None)
     _em = [(R["exp_mes"], R["sys"]["casa"]) for R in RS if R.get("exp_mes") is not None]
     exp_mes = sum(v for v, _ in _em) if _em else None
-    ritmo = meta_ex * dias_tr / dias_mes                      # lo que permite la meta a esta fecha, repartida de forma lineal en el mes
     proy = (exp_mes / dias_tr * dias_mes) if exp_mes is not None else None
-    esc_ex = max(meta_ex, exp_mes or 0) * 1.25
-    if exp_mes is None:
-        e_, i_, t_ = "neu", "", ""
-    elif exp_mes > meta_ex:
-        e_, i_, t_ = "ser", "✕", "Superó la meta del mes"
-    elif exp_mes > ritmo:
-        e_, i_, t_ = "warn", "▲", "Por encima del ritmo de la meta"
+    esc_ex = max(meta_v, exp_tot) * 1.25
+    if exp_mes is not None and exp_mes > meta_ex:
+        e_, i_, t_ = "ser", "✕", "Superó el tope del mes"
+    elif exp_tot > meta_v:
+        e_, i_, t_ = "warn", "▲", f"Por encima de la meta de {h_v} h"
     else:
-        e_, i_, t_ = "good", "✓", f"Dentro de la meta · {dec(100 * exp_mes / meta_ex, 0)} % usado"
+        e_, i_, t_ = "good", "✓", f"Dentro de la meta · {dec(100 * exp_tot / meta_v, 0)} % usado"
     top_ex = max(_em) if _em else None
     _off = [(R["sys"]["casa"], R["exp_ctr_fin_ts"]) for R in RS if R.get("exp_ctr_fin_ts")]
-    nota_off = (" Sin dato al cierre de la ventana (se usa el último valor de su contador; los totales de la ventana no los cuentan): " + "; ".join(f"{c} hasta el {hbd(ts)}" for c, ts in _off) + ".") if _off else ""
+    nota_off = (" Sin dato al cierre de la ventana (se usa el último valor de su contador para el acumulado del mes; los totales de la ventana no los cuentan): " + "; ".join(f"{c} hasta el {hbd(ts)}" for c, ts in _off) + ".") if _off else ""
     mes_txt = f"{MESES[fin_m.month - 1]}"
-    _agrega("Energía exportada del mes", (dec(exp_mes, 1) if exp_mes is not None else "—", ""), "kWh en el mes", _frac(exp_mes, esc_ex), _frac(meta_ex, esc_ex), _frac(ritmo, esc_ex), e_, i_, t_,
-            (dec(exp_mes, 1) + " kWh") if exp_mes is not None else "—", "≤ " + dec(meta_ex, 0) + " kWh", f"Acumulado desde el 1 de {mes_txt}" + (f"; proyección del mes: {dec(proy, 0)} kWh." if (proy is not None and dias_tr >= 5) else "."),
-            f"Energía activa exportada a la red desde el 1 de {mes_txt}: {dec(exp_mes, 1) if exp_mes is not None else '—'} kWh. Meta: {dec(meta_ex, 0)} kWh o menos en el mes. Ritmo permitido a esta fecha: {dec(ritmo, 1)} kWh." + (f" Proyección del mes: {dec(proy, 0)} kWh." if proy is not None else ""),
-            ("0", dec(esc_ex, 0)),
-            f"Energía activa exportada a la red (contador del medidor de red) acumulada desde el 1 de {mes_txt} 00:00 hasta el {hbd(W1)}, suma de {len(_em)} sistemas. Meta: {dec(meta_ex, 0)} kWh o menos en el mes, de todo el portafolio; la marca tenue es lo que permite la meta a esta fecha (ritmo lineal: {dec(meta_ex, 0)} × días transcurridos ÷ días del mes = {dec(ritmo, 1)} kWh)."
-            + (f" Proyección al cierre del mes: {dec(proy, 0)} kWh." if proy is not None else "") + f" En la ventana{' (sin los sistemas sin dato al cierre)' if _off else ''} se exportaron {dec(exp_tot, 1)} kWh y se importaron {dec(imp_tot, 0)} kWh." + (f" Mayor exportador del mes: {top_ex[1]}, {dec(top_ex[0], 1)} kWh." if top_ex else "") + nota_off,
-            "al mes")
+    _ctx_mes = (f"En {mes_txt}: {dec(exp_mes, 1)} de {dec(meta_ex, 0)} kWh ({dec(100 * exp_mes / meta_ex, 0)} %)" + (f"; proyección del mes: {dec(proy, 0)} kWh." if (proy is not None and dias_tr >= 5) else ".")) if exp_mes is not None else ""
+    _agrega("Energía exportada", (dec(exp_tot, 1), ""), f"kWh en {h_v} h", _frac(exp_tot, esc_ex), _frac(meta_v, esc_ex), None, e_, i_, t_,
+            dec(exp_tot, 1) + " kWh", "≤ " + dec(meta_v, 1) + " kWh", _ctx_mes,
+            f"Energía activa exportada a la red en las últimas {h_v} h: {dec(exp_tot, 1)} kWh. Meta: {dec(meta_v, 1)} kWh o menos, la parte del tope mensual ({dec(meta_ex, 0)} kWh) que le toca a la ventana." + (" " + _ctx_mes if _ctx_mes else ""),
+            ("0", dec(esc_ex, 1)),
+            f"Energía activa exportada a la red (contador del medidor de red) entre el {hbd(W0)} y el {hbd(W1)}, suma de {n_et} sistemas con dato de la ventana. Meta (propuesta, por confirmar): el tope de {dec(meta_ex, 0)} kWh al mes de todo el portafolio, repartido por igual entre los {dias_mes} días del mes ({dec(meta_ex, 0)} ÷ {dias_mes} × {dv_txt} {'día' if dias_v == 1 else 'días'} = {dec(meta_v, 2)} kWh). "
+            f"El acumulado del mes (contador del medidor de red al cierre de la ventana menos el de las 00:00 del día 1: {dec(exp_mes, 1) if exp_mes is not None else '—'} kWh, de {len(_em)} sistemas) no pinta el arco, pero si supera el tope el medidor pasa a rojo."
+            + f" En la ventana se importaron {dec(imp_tot, 0)} kWh." + (f" Mayor exportador del mes: {top_ex[1]}, {dec(top_ex[0], 1)} kWh." if top_ex else "") + nota_off,
+            f"en {h_v} h")
     bloque_medidores = ('<section class="gsec"><div class="gauges">' + "".join(_tarj) + '</div>'
                         '<p class="g-ley"><span><i class="k-real" style="--gc:var(--ink2)"></i>arco: la realidad</span><span><i class="k-meta"></i>marca clara: la meta</span><span><i class="k-al"></i>marca tenue: umbral de alerta</span></p>'
                         '<details><summary>Metas y cálculo de cada indicador</summary><div style="margin-top:10px">'

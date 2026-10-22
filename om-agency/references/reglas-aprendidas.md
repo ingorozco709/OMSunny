@@ -908,3 +908,16 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `serie()` pide el resto de las claves que llegan al límite, desde su último punto y sin duplicar, hasta cubrir el rango; las claves que no llegan al límite no se vuelven a pedir. Probado contra Metrum con la Casa 2: la serie paginada con límites de 1 a 500 es idéntica a la de una sola respuesta, y el reporte del 22-oct y el del lunes 19-oct con el límite en 300 (150 para la batería llena) salen idénticos a los normales (HTML y JSON).
 
 **Dónde está el código:** `serie` en `reporte-diario/reporte_diario.py`.
+
+## 2026-10-22 — Los medidores del resumen son de las últimas 24 horas; el de exportación deja de ser del mes
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Instrucción del usuario (22-oct):** "te recuerdo que en el reporte diario estos datos son de las ultimas 24 horas de operación" (sobre los seis medidores). Antes había propuesto cambiar el primer medidor: "Los cortes de red del OR yo no los puedo evitar, cambiemos ese kpis por sistemas con respaldo. O no se que opinas tu ?"; al ver el borrador de «Sistemas con respaldo» (sin corte de red, o con respaldo total en todos sus cortes: 47 de 48 el 22-oct, falla la Casa 9G por un corte de red de 6 s) respondió: "como así que 47 sistemas sin respaldo ? mejor deja la metrica de sistemas sin corte de red".
+
+**Cómo se aplicó:**
+- El primer medidor sigue siendo «Sistemas sin cortes de red» (informativo: los cortes del operador de red no dependen de Sunny; la meta de que ninguno tenga cortes es una propuesta por confirmar). No volver a proponer «Sistemas con respaldo» salvo que el usuario lo pida; el respaldo ya lo mide el medidor «Respaldo».
+- «Energía exportada» pasa de acumulado del mes a las últimas 24 h de la ventana (72 h el lunes): el arco es lo exportado en la ventana (suma de la exportación de cada sistema con dato) y la meta es la parte del tope mensual de 30 kWh que le toca (30 ÷ días del mes × días de la ventana: 0,97 kWh por día en octubre; propuesta, por confirmar). El 22-oct: 0,8 kWh frente a ≤ 1,0 kWh. Debajo va el acumulado del mes ("En oct: 20,6 de 30 kWh (69 %); proyección del mes: 30 kWh"), que no pinta el arco pero pasa el medidor a rojo si supera el tope.
+- Generación FV, yield y cobertura siguen siendo del último día completo con cierre diario (regla de cierres), no de las 24 h móviles.
+
+**Dónde está el código:** bloque "6) energía activa exportada en la ventana" del resumen en medidores, en `reporte-diario/reporte_html.py`.
