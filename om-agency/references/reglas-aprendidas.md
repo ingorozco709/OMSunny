@@ -931,3 +931,13 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `METAS["exportacion"] = 1.0` (kWh por día de todo el portafolio). El medidor «Energía exportada» compara lo exportado en la ventana con 1 kWh × los días de la ventana (1,0 kWh en 24 h; 3,0 kWh el lunes): verde dentro de la meta y ámbar por encima. El acumulado del mes y su promedio por día van como texto debajo (22-oct: 20,6 kWh, 0,97 kWh por día); ya no hay tope mensual ni rojo por el mes. Con los datos del 22-oct: 0,8 kWh frente a ≤ 1,0 kWh.
 
 **Dónde está el código:** `METAS` y el bloque "6) energía activa exportada" del resumen en medidores, en `reporte-diario/reporte_html.py`.
+
+## 2026-10-22 — SOC al apagarse la casa sin lectura reciente: el último dato registrado ese mismo día, con *
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos (reporte diario y reporte ejecutivo del periodo).
+
+**Instrucción del usuario:** el 7-oct, para la leyenda del corte: "a la leyenda del corte le incluiría el SOC al inicio del corte y donde no encuentras dato usa el ultimo dato registrado". El 22-oct, al ver la barra «Sin dato de SOC» en la diapositiva de causas del reporte ejecutivo de octubre: "yo te dije que cuando pase eso tomas el ultimo dato del soc registrado del mismo dia del evento y le puedes colocar un * con la aclaración".
+
+**Cómo se aplicó (reporte ejecutivo de octubre):** el SOC al apagarse la casa es el dato de hasta 30 min antes. Si no hay (inversor sin comunicación), se toma el último dato registrado el mismo día del evento (hora Bogotá), antes del apagón o, si ese día no hubo ninguno antes, el primero posterior; queda marcado con * y la diapositiva (nota al pie y notas del orador) y el libro de soporte (hoja "Huecos por causa") dicen de dónde salió. No hay barra «Sin dato de SOC» mientras exista algún dato ese día. Si ese día no hay ningún dato y el apagón empieza con la red ya de vuelta, se clasifica como demora al volver a la red (con la red de vuelta el SOC no es la causa). No poner un tope de horas al dato: el de 6 h que se había usado era un invento del agente (se atribuyó al generador, que no lo tiene). Octubre: 31 huecos con * (1,2 h de 25,1 h); los dos que estaban sin clasificar eran la Casa 121 CR (02/10, inversor sin comunicación desde la tarde anterior) y la Casa 382p (18/10, inversor sin comunicar 10 días).
+
+**Pendiente de confirmar con el usuario:** el reporte diario (`soc0_viejo` en `reporte-diario/reporte_diario.py` y la leyenda con * de `reporte_html.py`) usa el último dato registrado antes del corte sin límite de día; no se ha ajustado al "mismo día".
