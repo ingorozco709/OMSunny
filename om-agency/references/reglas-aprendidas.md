@@ -921,3 +921,13 @@ Reportes Operativos Periódicos.
 - Generación FV, yield y cobertura siguen siendo del último día completo con cierre diario (regla de cierres), no de las 24 h móviles.
 
 **Dónde está el código:** bloque "6) energía activa exportada en la ventana" del resumen en medidores, en `reporte-diario/reporte_html.py`.
+
+## 2026-10-22 — Meta de exportación: 1 kWh por día
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Instrucción del usuario:** "la meta de exportación es 1kWh dia". Reemplaza el tope de 30 kWh al mes (una propuesta del agente, nunca confirmada) de las entradas del 21 y del 22-oct.
+
+**Cómo se aplicó:** `METAS["exportacion"] = 1.0` (kWh por día de todo el portafolio). El medidor «Energía exportada» compara lo exportado en la ventana con 1 kWh × los días de la ventana (1,0 kWh en 24 h; 3,0 kWh el lunes): verde dentro de la meta y ámbar por encima. El acumulado del mes y su promedio por día van como texto debajo (22-oct: 20,6 kWh, 0,97 kWh por día); ya no hay tope mensual ni rojo por el mes. Con los datos del 22-oct: 0,8 kWh frente a ≤ 1,0 kWh.
+
+**Dónde está el código:** `METAS` y el bloque "6) energía activa exportada" del resumen en medidores, en `reporte-diario/reporte_html.py`.
