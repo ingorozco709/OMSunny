@@ -880,3 +880,31 @@ Reportes Operativos Periódicos.
 - Su problema de comunicación se trata igual que el de las Casas 60p y 382p: está en seguimiento del equipo y, si aparece sin datos, se dice en una línea al final del resumen, sin pedir acciones. A diferencia de ellas, el usuario no ha dicho que la causa sea baja señal; no se afirma una causa.
 - Sin cambios en el generador. La nota quedó también en el texto de la rutina diaria.
 
+## 2026-10-21 — El resumen del reporte pasa a medidores circulares con meta y realidad
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Instrucción del usuario:** "quiero volver este resumen con gráficos circulares tipo desaborad [dashboard] que marquen las metas y la realidad" (21-oct), sobre las seis tarjetas de indicadores de la parte alta del reporte; y, sobre la cobertura: "la cobertura solar es del 90%". Al ver el borrador: "Me gusta, puedes publicarlo por favor". El 22-oct, cuando la rutina de las 06:50 publicó el reporte con las tarjetas anteriores: "Porq al reporte de hoy no le aplicaste los cambios que definimos ayer con los graficos circulares ?"; autorizó subir el cambio al generador del repositorio ("Si subelo").
+
+**Qué la originó:** el 21-oct los medidores se armaron en una copia de trabajo y se publicaron a mano. La rutina diaria genera con el código de la rama `claude/loving-hawking-iwftvn` del repositorio y su regla es no modificar código ni hacer commits, así que el 22-oct salió con el formato anterior. **Un cambio de formato aprobado por el usuario solo llega a la rutina cuando está en el repositorio:** al aprobarlo hay que pedir de inmediato el OK para subirlo (la rutina no puede hacerlo) y decir que, sin eso, el siguiente reporte sale con el formato anterior.
+
+**Cómo se aplicó:** seis medidores (arco = realidad, marca clara = meta, marca tenue = umbral de alerta) y el desplegable "Metas y cálculo de cada indicador":
+- Sistemas sin cortes de red: meta, ninguno con cortes (propuesta, por confirmar con el usuario).
+- Respaldo: 99 % o más (el umbral de "Respaldo total").
+- Generación FV: patrón del portafolio (mediana de la generación total de los días previos, mínimo 3, × los días de la ventana).
+- Yield proyectado: yield patrón de la región (1188 Cali, 1323 costa) ponderado por kWp.
+- Cobertura solar: 90 % o más (instrucción del usuario).
+- Energía exportada del mes: tope de 30 kWh al mes de todo el portafolio (propuesta, por confirmar), acumulado desde el día 1: contador `energyAE` del medidor de red al cierre de la ventana menos el de las 00:00 del día 1; sin dato al cierre se usa el último valor del contador (Casa 447p el 22-oct). El 22-oct iba en 20,6 kWh (69 % del tope).
+- La nota de cobertura dice con cuántos sistemas se calculó ("47 de 48 que tienen datos de todos los días de la ventana") y "Límites del análisis" lista las casas y los días sin cierre diario, en vez de un texto fijo. En el mismo cambio quedaron los ajustes para reportes de periodo largo (rótulo del periodo, eje por día, hora mediana de batería llena); en el diario el único efecto es que el yield se divide entre los días con cierre diario de cada casa, lo que solo cambia el lunes.
+
+**Dónde está el código:** `METAS`, `_medidor`, `_estado_ratio` y el bloque "resumen en medidores circulares" en `reporte-diario/reporte_html.py`; `exp_mes` y `exp_ctr_fin` en `analizar` y `main` de `reporte-diario/reporte_diario.py`.
+
+## 2026-10-22 — Datos cada minuto: la lectura de series de Metrum pagina las respuestas
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Qué la originó:** el 21-oct la Casa 2 pasó de datos cada 15 min a cada minuto (inversor y medidores desde las 10:28–10:31, hora de Bogotá; el usuario: "la frecuencia de datos de la casa 2 cambió a minutal, puedes verlo ?"). Ese mismo día 21 sistemas ya estaban a 1 min y 23 seguían a 15 min. Metrum devuelve a lo sumo `limit` puntos por clave y, en orden ascendente, los más antiguos primero: con una sola respuesta el final del rango se pierde sin avisar. Con datos cada minuto le pasaría al historial de 10 días de `energyPD` (más de 14 000 puntos con un límite de 5000; desde el 25-oct), a la ventana del lunes del medidor de red (84 h, unos 5 050 puntos) y a la hora de batería llena de un día completo (1440 puntos con un límite de 1000).
+
+**Cómo se aplicó:** `serie()` pide el resto de las claves que llegan al límite, desde su último punto y sin duplicar, hasta cubrir el rango; las claves que no llegan al límite no se vuelven a pedir. Probado contra Metrum con la Casa 2: la serie paginada con límites de 1 a 500 es idéntica a la de una sola respuesta, y el reporte del 22-oct y el del lunes 19-oct con el límite en 300 (150 para la batería llena) salen idénticos a los normales (HTML y JSON).
+
+**Dónde está el código:** `serie` en `reporte-diario/reporte_diario.py`.

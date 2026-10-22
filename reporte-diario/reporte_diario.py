@@ -88,8 +88,22 @@ def atributos(dv):
     return dv, r
 
 def serie(dev_id, keys, t0, t1, limit=5000):
-    c, d = req("GET", f"/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys={keys}&startTs={int(t0)}&endTs={int(t1)}&limit={limit}&agg=NONE&orderBy=ASC", timeout=120)
-    return dev_id, (d if c == 200 and isinstance(d, dict) else {})
+    """Telemetría cruda entre t0 y t1. Metrum entrega a lo sumo `limit` puntos por clave y, en orden ascendente, los más antiguos: con datos cada minuto un rango
+    de varios días no cabe en una respuesta. Si alguna clave llega al límite se pide el resto de esa clave, desde su último punto, hasta cubrir el rango."""
+    out, ult, ini, pend = {}, {}, int(t0), keys
+    while pend:
+        c, d = req("GET", f"/api/plugins/telemetry/DEVICE/{dev_id}/values/timeseries?keys={pend}&startTs={ini}&endTs={int(t1)}&limit={limit}&agg=NONE&orderBy=ASC", timeout=120)
+        if not (c == 200 and isinstance(d, dict)):
+            break
+        llenas = {}
+        for k, pts in d.items():
+            out.setdefault(k, []).extend(p for p in pts if p["ts"] > ult.get(k, -1))
+            if pts:
+                ult[k] = max(ult.get(k, -1), max(p["ts"] for p in pts))
+            if len(pts) >= limit:
+                llenas[k] = ult[k]
+        pend, ini = ",".join(llenas), (min(llenas.values()) + 1 if llenas else ini)
+    return dev_id, out
 
 # ------------------------------------------------------------------ utilidades
 def hb(t, seg=False):
@@ -566,6 +580,13 @@ def analizar(s, D, W0, W1, dias):
     for nombre, L in (("exp", aE), ("imp", aI), ("cons", cI)):
         x = delta(L, W0, W1)
         R[nombre]["total"] = x / 1000 if x is not None else None
+    R["red_id"] = red["id"] if red else None
+    c_fin = contador(aE, W1)                  # contador energyAE (Wh) al cierre de la ventana: base de la energía exportada acumulada del mes
+    if c_fin is None:                         # sin dato al cierre (sistema sin comunicación): el contador no se detiene, se usa su último valor
+        _u = [(k, v) for k, v in aE if isinstance(v, float) and k <= W1 + 600000]
+        c_fin = max(_u)[1] if _u else None
+        R["exp_ctr_fin_ts"] = max(_u)[0] if _u else None
+    R["exp_ctr_fin"] = c_fin
     return R
 
 # ------------------------------------------------------------------ agregación
@@ -670,6 +691,24 @@ def main():
                 dem_hist[d0] = b[1] if (b and b[1] > 0) else None      # consumo del cliente (demanda del medidor solar) de cada día previo
         R["pv_hist"] = hist; R["dem_hist"] = dem_hist; R["inv_id"] = inv["id"] if inv else None
         RS.append(R)
+    # energía exportada acumulada del mes (meta mensual): contador energyAE del medidor de red al cierre de la ventana menos el de las 00:00 del día 1
+    fin_mes = fin - dt.timedelta(minutes=1) if (fin.hour == 0 and fin.minute == 0) else fin
+    mes0 = ts_bog(fin_mes.year, fin_mes.month, 1)
+    def _ctr_mes(R):
+        rid = R.get("red_id") or (R["sys"]["red"][0]["id"] if R["sys"]["red"] else None)      # sin dato en el rango consultado, el generador no eligió medidor: se toma el registrado
+        if not rid:
+            return R, None
+        c0 = contador(S(serie(rid, "energyAE", mes0 - 3600000, mes0 + 3600000)[1], "energyAE"), mes0)
+        if R.get("exp_ctr_fin") is None and c0 is not None:      # sin dato en el rango consultado (equipo sin comunicación desde antes): último valor conocido de su contador
+            c_, d_ = req("GET", f"/api/plugins/telemetry/DEVICE/{rid}/values/timeseries?keys=energyAE", timeout=60)
+            u_ = S(d_ if (c_ == 200 and isinstance(d_, dict)) else {}, "energyAE")
+            if u_ and isinstance(u_[-1][1], float) and u_[-1][0] <= W1 + 600000:
+                R["exp_ctr_fin"] = u_[-1][1]; R["exp_ctr_fin_ts"] = u_[-1][0]
+        return R, c0
+    with cf.ThreadPoolExecutor(8) as ex:
+        for R, c0 in ex.map(_ctr_mes, RS):
+            c1 = R.get("exp_ctr_fin")
+            R["exp_mes"] = (c1 - c0) / 1000 if (c0 is not None and c1 is not None and c1 >= c0) else None
     # batería llena: primera hora de cada día evaluado en que el SOC llega a BATERIA_LLENA_SOC entre las 06:00 y las 18:00. Explica un yield bajo en sistemas
     # sin exportación: con la batería llena el inversor limita la producción FV al consumo de la casa.
     def _lleno(t):

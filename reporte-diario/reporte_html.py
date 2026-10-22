@@ -120,6 +120,104 @@ def _logo_html():
     return ""
 LOGO = _logo_html()
 
+# ------------------------------------------------------------------ medidores circulares del resumen (meta frente a realidad)
+import math
+G_A0, G_BARRIDO = 135.0, 270.0     # el medidor abre por abajo: arranca a las 7:30 del reloj y barre 270° en sentido horario
+G_GRAVE = 0.75                     # por debajo de esta fracción de la meta el medidor pasa de ámbar a naranja (YIELD_ALERTA, 90 %, es el paso de verde a ámbar)
+
+METAS = {                          # metas de los indicadores del resumen; None = sin meta definida (el medidor solo muestra la realidad)
+    "sin_cortes": 100.0,           # % de sistemas sin cortes de red (propuesta, por confirmar)
+    "respaldo": 99.0,              # % del tiempo de corte con tensión en la casa: el umbral de «Respaldo total» del reporte
+    "generacion": "patron",        # kWh: mediana de la generación total de los días previos (patrón del portafolio)
+    "yield": "patron",             # kWh/kWp·año: yield patrón de la región (Cali / costa) ponderado por la kWp de cada región
+    "cobertura": 90.0,             # % de cobertura solar (generación FV ÷ consumo de los clientes): meta dada por el usuario
+    "exportacion": 30.0,           # kWh al mes (tope): energía activa exportada acumulada del mes en curso, de todo el portafolio (por confirmar)
+}
+
+EXTRA_CSS += """
+.gauges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (min-width:1500px){.gauges{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media (max-width:640px){.gauges{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:440px){.gauges{grid-template-columns:minmax(0,1fr)}}
+.gcard{--gc:var(--accent);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px 14px;margin:0;min-width:0;
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"t" "fig" "st" "rm" "d";justify-items:center;align-content:start;row-gap:6px}
+.gcard.g-good{--gc:var(--good)} .gcard.g-warn{--gc:var(--warn)} .gcard.g-ser{--gc:var(--ser)} .gcard.g-crit{--gc:var(--crit)} .gcard.g-neu{--gc:var(--accent)}
+.gcard h3{grid-area:t;justify-self:start;font-size:18px;line-height:1.2}
+.g-fig{grid-area:fig;width:100%;max-width:215px;margin:0}
+.g-fig svg{display:block;width:100%;height:auto}
+.g-st{grid-area:st;display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink);text-align:center}
+.g-st i{font-style:normal;font-size:14px;line-height:1;color:var(--gc)}
+.g-rm{grid-area:rm;display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin:0;width:100%;max-width:300px}
+.g-rm>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.g-rm dt{display:flex;align-items:center;gap:6px;font-family:var(--f-m);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.g-rm dd{margin:0;font-size:15px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.g-rm dd small{font-size:12px;font-weight:400;color:var(--ink2)}
+.k-real{width:9px;height:9px;border-radius:50%;background:var(--gc);display:inline-block}
+.k-meta{width:3px;height:12px;border-radius:1px;background:var(--ink);display:inline-block}
+.g-d{grid-area:d;margin:0;font-size:12.5px;line-height:1.4;color:var(--ink2);text-align:center;max-width:34ch}
+.g-ley{margin:0;font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 18px}
+.g-ley span{display:inline-flex;align-items:center;gap:6px}
+.g-ley .k-al{width:3px;height:10px;border-radius:1px;background:var(--muted);display:inline-block}
+.gsvg .g-track{fill:none;stroke:var(--gc);stroke-opacity:.2;stroke-linecap:round}
+.gsvg .g-val{fill:none;stroke:var(--gc);stroke-linecap:round}
+.gsvg .g-mk{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}
+.gsvg .g-mk-bg{stroke:var(--surface);stroke-width:6.5;stroke-linecap:round}
+.gsvg .g-al{stroke:var(--muted);stroke-width:1.6;stroke-linecap:round}
+.gsvg .g-v{font-family:var(--f-d);font-weight:700;fill:var(--ink)}
+.gsvg .g-v2{font-family:var(--f-d);font-weight:600;font-size:19px;fill:var(--ink2)}
+.gsvg .g-u{font-family:var(--f-m);font-size:12px;fill:var(--ink2)}
+.gsvg .g-e{font-family:var(--f-m);font-size:10.5px;fill:var(--muted)}
+@media (max-width:440px){
+  .gcard{grid-template-columns:136px minmax(0,1fr);grid-template-areas:"fig t" "fig st" "fig rm" "d d";justify-items:start;align-items:center;column-gap:12px;padding:12px 14px}
+  .g-rm{grid-template-columns:1fr 1fr;gap:4px 10px;max-width:none}
+  .g-rm dd{font-size:14px}
+  .g-st{text-align:left}
+  .g-d{text-align:left;max-width:none}
+}
+"""
+
+def _pt(cx, cy, r, ang):
+    a = math.radians(ang)
+    return cx + r * math.cos(a), cy + r * math.sin(a)
+
+def _arco(cx, cy, r, a0, a1):
+    x0, y0 = _pt(cx, cy, r, a0); x1, y1 = _pt(cx, cy, r, a1)
+    return f"M{x0:.2f} {y0:.2f}A{r:g} {r:g} 0 {1 if a1 - a0 > 180 else 0} 1 {x1:.2f} {y1:.2f}"
+
+def _medidor(titulo, centro, unidad, f_real, f_meta, f_alerta, estado, icono, estado_txt, real_txt, meta_txt, desc, tip, escala=("0", ""), meta_nota=""):
+    """Tarjeta con un medidor circular. El arco coloreado es la realidad; la marca clara, la meta; la marca tenue, el umbral de alerta.
+    f_real, f_meta y f_alerta son fracciones (0 a 1) de la escala del medidor; None = no se dibuja."""
+    cx, cy, r, w = 110.0, 100.0, 76.0, 13.0
+    s = [f'<svg viewBox="0 0 220 180" class="gsvg" role="img" aria-label="{esc(titulo)}: real {esc(real_txt)}, meta {esc(meta_txt)}. {esc(estado_txt)}"><title>{esc(tip)}</title>']
+    s.append(f'<path class="g-track" d="{_arco(cx, cy, r, G_A0, G_A0 + G_BARRIDO)}" stroke-width="{w:g}"/>')
+    if f_real is not None and f_real > 0.004:
+        s.append(f'<path class="g-val" d="{_arco(cx, cy, r, G_A0, G_A0 + G_BARRIDO * min(1.0, f_real))}" stroke-width="{w:g}"/>')
+    for f, cls, largo in ((f_alerta, "g-al", 8.5), (f_meta, "g-mk", 12.0)):
+        if f is None:
+            continue
+        a = G_A0 + G_BARRIDO * min(1.0, max(0.0, f))
+        x0, y0 = _pt(cx, cy, r - largo, a); x1, y1 = _pt(cx, cy, r + largo, a)
+        if cls == "g-mk":
+            s.append(f'<line class="g-mk-bg" x1="{x0:.2f}" y1="{y0:.2f}" x2="{x1:.2f}" y2="{y1:.2f}"/>')
+        s.append(f'<line class="{cls}" x1="{x0:.2f}" y1="{y0:.2f}" x2="{x1:.2f}" y2="{y1:.2f}"/>')
+    grande, chico = (centro if isinstance(centro, tuple) else (centro, ""))
+    tam = 40 if len(grande) <= 4 else (34 if len(grande) == 5 else 29)
+    s.append(f'<text class="g-v" x="{cx:g}" y="{cy + 10:g}" text-anchor="middle" style="font-size:{tam}px">{esc(grande)}' + (f'<tspan class="g-v2">{esc(chico)}</tspan>' if chico else '') + '</text>')
+    if unidad:
+        s.append(f'<text class="g-u" x="{cx:g}" y="{cy + 31:g}" text-anchor="middle">{esc(unidad)}</text>')
+    xa, ya = _pt(cx, cy, r, G_A0); xb, yb = _pt(cx, cy, r, G_A0 + G_BARRIDO)
+    s.append(f'<text class="g-e" x="{xa:.1f}" y="{ya + 24:.1f}" text-anchor="middle">{esc(escala[0])}</text><text class="g-e" x="{xb:.1f}" y="{yb + 24:.1f}" text-anchor="middle">{esc(escala[1])}</text>')
+    s.append('</svg>')
+    meta_html = f'<dd>{esc(meta_txt)}' + (f' <small>{esc(meta_nota)}</small>' if meta_nota else '') + '</dd>'
+    st_html = (('<div class="g-st">' + (f'<i aria-hidden="true">{icono}</i>' if icono else '') + f'<span>{esc(estado_txt)}</span></div>') if estado_txt else '')
+    return (f'<figure class="gcard g-{estado}" title="{esc(tip)}"><h3>{esc(titulo)}</h3><div class="g-fig">{"".join(s)}</div>' + st_html +
+            f'<dl class="g-rm"><div><dt><span class="k-real"></span>Real</dt><dd>{esc(real_txt)}</dd></div><div><dt><span class="k-meta"></span>Meta</dt>{meta_html}</div></dl>'
+            f'<p class="g-d">{esc(desc)}</p></figure>')
+
+def _estado_ratio(r):
+    """Estado de un indicador contra su meta: verde desde YIELD_ALERTA (90 %) de la meta, ámbar hasta G_GRAVE (75 %), naranja por debajo."""
+    return ("good", "✓") if r >= YIELD_ALERTA else (("warn", "▲") if r >= G_GRAVE else ("ser", "✕"))
+
 
 def _kwh(x, n=1):
     return "—" if x is None else dec(x, n)
@@ -165,7 +263,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     elif abs(horas - 24) < 1.5:
         titulo, rot_kick, rot_h1 = f"Operación diaria {fin.day} {MESES[fin.month-1]}", "Últimas 24 horas", "Operación de las últimas 24 horas"
     else:
-        _per = f"{ini.day} {MESES[ini.month-1]} al {fin.day} {MESES[fin.month-1]}"
+        _fin_et = fin - dt.timedelta(minutes=1) if (fin.hour == 0 and fin.minute == 0) else fin
+        _per = f"{ini.day} {MESES[ini.month-1]} al {_fin_et.day} {MESES[_fin_et.month-1]}"
         titulo, rot_kick, rot_h1 = f"Operación {_per}", f"Periodo de {horas:.0f} horas", f"Operación del {_per}"
 
     # ------------------------------------------------ eventos de red
@@ -180,7 +279,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     for R in RS:
         s = R["sys"]; vs = [v for v in R["pv"].values() if v is not None]
         R["pv_tot"] = sum(vs) if vs else None
-        R["sy_anual"] = (R["pv_tot"] / ndias / s["cap"] * 365) if (R["pv_tot"] is not None and cap_ok(R)) else None
+        R["pv_n"] = len(vs)
+        R["sy_anual"] = (R["pv_tot"] / max(1, R["pv_n"]) / s["cap"] * 365) if (R["pv_tot"] is not None and cap_ok(R)) else None
         # frente al yield patrón de su región (Cali / costa), definido por el usuario: yield anual proyectado del sistema ÷ patrón
         R["patron"] = patron_yield(s["ciudad"])
         R["ratio"] = (R["sy_anual"] / R["patron"]) if (R["sy_anual"] is not None and R["patron"]) else None
@@ -232,8 +332,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         R["cob_sol"] = (100 * g_ / R["cons_cli"]) if (R["cons_cli"] and R["cons_cli"] > 0) else None
     _ok = [R for R in RS if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
     cob_flota = (100 * sum(R["pv_tot"] for R in _ok) / sum(R["cons_cli"] for R in _ok)) if _ok else None
+    _n_cob = len(_ok)
+    _txt_cob = f", calculada con los {_n_cob} de {len(RS)} sistemas que tienen datos de todos los días de la ventana" if _n_cob < len(RS) else ""
     _cy = [R for R in RS if R["pv_tot"] is not None and cap_ok(R)]
-    yield_flota = (sum(R["pv_tot"] for R in _cy) / ndias / sum(R["sys"]["cap"] for R in _cy) * 365) if _cy else None
+    yield_flota = (sum(R["pv_tot"] for R in _cy) / sum(max(1, R["pv_n"]) * R["sys"]["cap"] for R in _cy) * 365) if _cy else None
     sin_exp = [R for R in RS if R["exp"].get("total") is not None and R["exp"]["total"] < 0.05]
 
     # ------------------------------------------------ comunicación (último dato de cada dispositivo)
@@ -264,6 +366,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     if EV:
         sig = [e for e in EV if e["n"] >= 3 or (e["dur"] or 0) >= 60 or e["fin"] is None]
         micro = [e for e in EV if e not in sig]
+        if ndias > 3:
+            sig = sorted(sig, key=lambda e: (-e["n"], -(e["dur"] or 0)))
         resumen = []
         for e in sig[:6]:
             dur = "en curso" if e["fin"] is None else fmt(e["dur"] or 0)
@@ -354,7 +458,116 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         cob_txt = dec(cob, 1) + " %"
     k_res = f'<div class="kpi {"k-warn" if cs and cob is not None and cob < 99 else ""}"><div class="v">{cob_txt}</div><div class="l">del tiempo de corte con tensión en la casa (respaldo){"" if cs else ": sin cortes largos"}.</div></div>'
     k_yield = f'<div class="kpi"><div class="v">{dec(yield_flota, 0) if yield_flota else "—"} <small>kWh/kWp·año</small></div><div class="l">de yield proyectado a un año: generación diaria real de {len(_cy)} sistemas dividida entre su potencia pico instalada en DC (suma de kWp), por 365.</div></div>'
-    k_cob = f'<div class="kpi"><div class="v">{dec(cob_flota, 0) if cob_flota is not None else "—"} <small>%</small></div><div class="l">de cobertura solar del portafolio Sunny: generación FV dividida entre el consumo de los clientes. La generación es el balance de medidores y el consumo es la demanda del medidor solar.</div></div>'
+    k_cob = f'<div class="kpi"><div class="v">{dec(cob_flota, 0) if cob_flota is not None else "—"} <small>%</small></div><div class="l">de cobertura solar del portafolio Sunny: generación FV dividida entre el consumo de los clientes{_txt_cob}. La generación es el balance de medidores y el consumo es la demanda del medidor solar.</div></div>'
+    # ---- resumen en medidores circulares: la realidad (arco) frente a la meta (marca)
+    _tarj, _filas = [], []
+    def _agrega(titulo, centro, unidad, f_real, f_meta, f_alerta, estado, icono, estado_txt, real_txt, meta_txt, desc, tip, escala, calculo, meta_nota=""):
+        _tarj.append(_medidor(titulo, centro, unidad, f_real, f_meta, f_alerta, estado, icono, estado_txt, real_txt, meta_txt, desc, tip, escala, meta_nota))
+        _filas.append(f'<tr><td><b>{esc(titulo)}</b></td><td class="n">{esc(real_txt)}</td><td class="n">{esc(meta_txt)}{(" (" + esc(meta_nota) + ")") if meta_nota else ""}</td><td>{(icono + " ") if icono else ""}{esc(estado_txt) if estado_txt else "Sin meta definida"}</td><td>{esc(calculo)}</td></tr>')
+    _frac = lambda v, vmax: None if (v is None or not vmax) else max(0.0, min(1.0, v / vmax))
+    # 1) sistemas sin cortes de red
+    n_ok = n_sys - len(con_cortes)
+    if en_curso:
+        e_, i_, t_ = "crit", "✕", f"{_pl(len(en_curso), 'sigue', 'siguen')} sin red"
+    elif con_cortes:
+        e_, i_, t_ = "warn", "▲", _pl(len(con_cortes), "sistema con cortes", "sistemas con cortes")
+    else:
+        e_, i_, t_ = "good", "✓", "Ningún sistema con cortes"
+    _agrega("Sistemas sin cortes de red", (str(n_ok), f" de {n_sys}"), "sistemas", _frac(n_ok, n_sys), 1.0, None, e_, i_, t_,
+            f"{n_ok} de {n_sys}", f"{n_sys} de {n_sys}",
+            f"{_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}." if total_cortes else "Sin cortes de red en la ventana.",
+            f"{n_ok} de {n_sys} sistemas sin ningún corte de red. Meta: ninguno con corte.", ("0", str(n_sys)),
+            "Sistemas sin ningún corte de red en la ventana ÷ sistemas del reporte. Meta (propuesta): que ningún sistema tenga cortes.", "propuesta")
+    # 2) respaldo
+    meta_rs = METAS["respaldo"]
+    cob_r = cob if cs else None
+    if cob_r is None:
+        e_, i_, t_ = "neu", "", "Sin cortes largos en la ventana"
+    elif cob_r >= meta_rs:
+        e_, i_, t_ = "good", "✓", "Cumple la meta"
+    else:
+        e_, i_ = ("warn", "▲") if cob_r >= 90 else ("ser", "✕")
+        t_ = f"{dec(meta_rs - cob_r, 1)} puntos por debajo de la meta"
+    _agrega("Respaldo", (dec(cob_r, 1) if cob_r is not None else "—", ""), "%", _frac(cob_r, 100), meta_rs / 100, 0.90, e_, i_, t_,
+            (dec(cob_r, 1) + " %") if cob_r is not None else "—", "≥ " + dec(meta_rs, 0) + " %", "Del tiempo de corte con tensión en la casa.",
+            f"Respaldo: la casa mantuvo tensión en {dec(cob_r, 1) if cob_r is not None else '—'} % del tiempo de corte. Meta: {dec(meta_rs, 0)} % o más; entre 90 y {dec(meta_rs, 0)} % es retardo de transferencia y menos de 90 % es falla de respaldo.",
+            ("0 %", "100 %"),
+            f"Tiempo de corte con tensión en la casa ÷ tiempo total de corte, de todos los cortes de la ventana. Meta: {dec(meta_rs, 0)} % o más (umbral de «Respaldo total»); de 90 a {dec(meta_rs, 0)} % es retardo de transferencia y menos de 90 %, falla de respaldo.")
+    # 3) generación FV frente a su patrón
+    esc_gen = (pv_pat * 1.25) if pv_pat else max(pv_total * 1.25, 1.0)
+    if pv_pat:
+        r_ = pv_total / pv_pat; e_, i_ = _estado_ratio(r_); t_ = f"{dec(100 * r_, 0)} % de la meta"
+    else:
+        e_, i_, t_ = "neu", "", ""
+    _agrega("Generación FV", (dec(pv_total, 0), ""), "kWh", _frac(pv_total, esc_gen), _frac(pv_pat, esc_gen), _frac(YIELD_ALERTA * pv_pat, esc_gen) if pv_pat else None, e_, i_, t_,
+            dec(pv_total, 0) + " kWh", (dec(pv_pat, 0) + " kWh") if pv_pat else "sin patrón", f"Del portafolio Sunny en {ndias} {'día' if ndias == 1 else 'días'}.",
+            f"Generación FV del portafolio Sunny: {dec(pv_total, 0)} kWh en {ndias} {'día' if ndias == 1 else 'días'}" + (f". Meta (patrón): {dec(pv_pat, 0)} kWh." if pv_pat else "."),
+            ("0", dec(esc_gen, 0)),
+            "Generación diaria de cada sistema (balance de medidores), sumada en el portafolio. Meta: patrón = mediana de la generación total de los días previos × los días de la ventana; la marca tenue es el 90 % del patrón.",
+            "patrón" if pv_pat else "")
+    # 4) yield proyectado frente al patrón de la región
+    _cp = [R for R in _cy if R.get("patron")]
+    pat_port = (sum(R["sys"]["cap"] * R["patron"] for R in _cp) / sum(R["sys"]["cap"] for R in _cp)) if _cp else None
+    esc_y = (pat_port * 1.25) if pat_port else max((yield_flota or 0) * 1.25, 1.0)
+    if yield_flota and pat_port:
+        r_ = yield_flota / pat_port; e_, i_ = _estado_ratio(r_); t_ = f"{dec(100 * r_, 0)} % de la meta"
+    else:
+        e_, i_, t_ = "neu", "", ""
+    _agrega("Yield proyectado", (dec(yield_flota, 0) if yield_flota else "—", ""), "kWh/kWp·año", _frac(yield_flota, esc_y), _frac(pat_port, esc_y), _frac(YIELD_ALERTA * pat_port, esc_y) if pat_port else None, e_, i_, t_,
+            dec(yield_flota, 0) if yield_flota else "—", dec(pat_port, 0) if pat_port else "sin patrón", f"A un año, de {len(_cy)} sistemas (kWp en DC).",
+            f"Yield proyectado a un año: {dec(yield_flota, 0) if yield_flota else '—'} kWh/kWp·año de {len(_cy)} sistemas" + (f". Meta (patrón de su región, ponderado por kWp): {dec(pat_port, 0)}." if pat_port else "."),
+            ("0", dec(esc_y, 0)),
+            "Generación diaria real de los sistemas ÷ su potencia pico instalada en DC (suma de kWp), por 365 (kWh/kWp·año). Meta: yield patrón de la región (Cali y costa) ponderado por la kWp de cada región; la marca tenue es el 90 % del patrón.",
+            "patrón" if pat_port else "")
+    # 5) cobertura solar
+    meta_cb = METAS["cobertura"]
+    if cob_flota is None:
+        e_, i_, t_ = "neu", "", ""
+    elif cob_flota >= meta_cb:
+        e_, i_, t_ = "good", "✓", "Cumple la meta"
+    else:
+        e_, i_ = ("warn", "▲") if cob_flota >= 0.9 * meta_cb else ("ser", "✕")
+        t_ = f"{dec(meta_cb - cob_flota, 1)} puntos por debajo de la meta"
+    _agrega("Cobertura solar", (dec(cob_flota, 1) if cob_flota is not None else "—", ""), "% del consumo", _frac(cob_flota, 100), meta_cb / 100, 0.9 * meta_cb / 100, e_, i_, t_,
+            (dec(cob_flota, 1) + " %") if cob_flota is not None else "—", "≥ " + dec(meta_cb, 0) + " %", "Generación FV ÷ consumo de los clientes.",
+            f"Cobertura solar: {dec(cob_flota, 1) if cob_flota is not None else '—'} % del consumo de los clientes{_txt_cob}. Meta: {dec(meta_cb, 0)} % o más.", ("0 %", "100 %"),
+            f"Generación FV ÷ consumo de los clientes{_txt_cob}. La generación es el balance de medidores y el consumo es la demanda del medidor solar. Meta: {dec(meta_cb, 0)} % o más; la marca tenue es el 90 % de la meta ({dec(0.9 * meta_cb, 0)} %), debajo de la cual el resultado pasa de ámbar a naranja.")
+    # 6) energía activa exportada acumulada del mes frente al tope mensual
+    import calendar
+    meta_ex = METAS["exportacion"]
+    fin_m = fin - dt.timedelta(minutes=1) if (fin.hour == 0 and fin.minute == 0) else fin
+    mes0_ = ts_bog(fin_m.year, fin_m.month, 1)
+    dias_mes = calendar.monthrange(fin_m.year, fin_m.month)[1]
+    dias_tr = max((W1 - mes0_) / 86400000, 1 / 24)
+    _em = [(R["exp_mes"], R["sys"]["casa"]) for R in RS if R.get("exp_mes") is not None]
+    exp_mes = sum(v for v, _ in _em) if _em else None
+    ritmo = meta_ex * dias_tr / dias_mes                      # lo que permite la meta a esta fecha, repartida de forma lineal en el mes
+    proy = (exp_mes / dias_tr * dias_mes) if exp_mes is not None else None
+    esc_ex = max(meta_ex, exp_mes or 0) * 1.25
+    if exp_mes is None:
+        e_, i_, t_ = "neu", "", ""
+    elif exp_mes > meta_ex:
+        e_, i_, t_ = "ser", "✕", "Superó la meta del mes"
+    elif exp_mes > ritmo:
+        e_, i_, t_ = "warn", "▲", "Por encima del ritmo de la meta"
+    else:
+        e_, i_, t_ = "good", "✓", f"Dentro de la meta · {dec(100 * exp_mes / meta_ex, 0)} % usado"
+    top_ex = max(_em) if _em else None
+    _off = [(R["sys"]["casa"], R["exp_ctr_fin_ts"]) for R in RS if R.get("exp_ctr_fin_ts")]
+    nota_off = (" Sin dato al cierre de la ventana (se usa el último valor de su contador; los totales de la ventana no los cuentan): " + "; ".join(f"{c} hasta el {hbd(ts)}" for c, ts in _off) + ".") if _off else ""
+    mes_txt = f"{MESES[fin_m.month - 1]}"
+    _agrega("Energía exportada del mes", (dec(exp_mes, 1) if exp_mes is not None else "—", ""), "kWh en el mes", _frac(exp_mes, esc_ex), _frac(meta_ex, esc_ex), _frac(ritmo, esc_ex), e_, i_, t_,
+            (dec(exp_mes, 1) + " kWh") if exp_mes is not None else "—", "≤ " + dec(meta_ex, 0) + " kWh", f"Acumulado desde el 1 de {mes_txt}" + (f"; proyección del mes: {dec(proy, 0)} kWh." if (proy is not None and dias_tr >= 5) else "."),
+            f"Energía activa exportada a la red desde el 1 de {mes_txt}: {dec(exp_mes, 1) if exp_mes is not None else '—'} kWh. Meta: {dec(meta_ex, 0)} kWh o menos en el mes. Ritmo permitido a esta fecha: {dec(ritmo, 1)} kWh." + (f" Proyección del mes: {dec(proy, 0)} kWh." if proy is not None else ""),
+            ("0", dec(esc_ex, 0)),
+            f"Energía activa exportada a la red (contador del medidor de red) acumulada desde el 1 de {mes_txt} 00:00 hasta el {hbd(W1)}, suma de {len(_em)} sistemas. Meta: {dec(meta_ex, 0)} kWh o menos en el mes, de todo el portafolio; la marca tenue es lo que permite la meta a esta fecha (ritmo lineal: {dec(meta_ex, 0)} × días transcurridos ÷ días del mes = {dec(ritmo, 1)} kWh)."
+            + (f" Proyección al cierre del mes: {dec(proy, 0)} kWh." if proy is not None else "") + f" En la ventana{' (sin los sistemas sin dato al cierre)' if _off else ''} se exportaron {dec(exp_tot, 1)} kWh y se importaron {dec(imp_tot, 0)} kWh." + (f" Mayor exportador del mes: {top_ex[1]}, {dec(top_ex[0], 1)} kWh." if top_ex else "") + nota_off,
+            "al mes")
+    bloque_medidores = ('<section class="gsec"><div class="gauges">' + "".join(_tarj) + '</div>'
+                        '<p class="g-ley"><span><i class="k-real" style="--gc:var(--ink2)"></i>arco: la realidad</span><span><i class="k-meta"></i>marca clara: la meta</span><span><i class="k-al"></i>marca tenue: umbral de alerta</span></p>'
+                        '<details><summary>Metas y cálculo de cada indicador</summary><div style="margin-top:10px">'
+                        + tabla('<th>Indicador</th><th class="n">Real</th><th class="n">Meta</th><th>Resultado</th><th>Cómo se calcula</th>', _filas, 900)
+                        + '</div></details></section>')
     # puntos
     li = "".join(f'<li>{_pill(PILL[n], t)}<span>{esc(x)}</span></li>' for n, t, x in P)
 
@@ -495,7 +708,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         g = [R for R in RS if R["sys"]["ciudad"] == c]
         pvc = sum(R["pv_tot"] for R in g if R["pv_tot"] is not None)
         _gy = [R for R in g if R["pv_tot"] is not None and cap_ok(R)]
-        yc = (sum(R["pv_tot"] for R in _gy) / ndias / sum(R["sys"]["cap"] for R in _gy) * 365) if _gy else None
+        yc = (sum(R["pv_tot"] for R in _gy) / sum(max(1, R["pv_n"]) * R["sys"]["cap"] for R in _gy) * 365) if _gy else None
         _g = [R for R in g if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
         cobc = (100 * sum(R["pv_tot"] for R in _g) / sum(R["cons_cli"] for R in _g)) if _g else None
         exc = sum(R["exp"]["total"] for R in g if R["exp"].get("total") is not None)
@@ -513,7 +726,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             cd = [(R, c) for R in RS for c in R["cortes"] if d0 <= c["a"] < d1]
             sd = len(set(id(R) for R, c in cd))
             rows.append(f'<tr><td><b>{_dia(d0)}</b></td><td class="n">{len(cd)}</td><td class="n">{sd}</td><td class="n">{dec(pvd, 0)}</td><td class="n">{dec(exd, 0)}</td><td class="n">{dec(imd, 0)}</td></tr>')
-        sec_dia = '<section><details><summary>Por día</summary><div style="margin-top:10px">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.</p></div></details></section>'
+        sec_dia = '<section><details><summary>Por día</summary><div style="margin-top:10px">' + tabla('<th>Día</th><th class="n">Cortes<br>iniciados</th><th class="n">Sistemas<br>con cortes</th><th class="n">Generación FV<br>kWh</th><th class="n">Exportada<br>kWh</th><th class="n">Importada<br>kWh</th>', rows, 620) + '<p class="note" style="margin-top:10px">' + ('Cada día va de 00:00 a 24:00 (hora de Bogotá) en todas las columnas.' if W0 == dias[0][0] else 'El viernes cuenta desde las 07:00 en cortes, exportación e importación; la generación FV es la del día completo.') + '</p></div></details></section>'
 
     # ------------------------------------------------ panel gráfico: semáforo, línea de tiempo, baterías y yield
     sec_vis = ""
@@ -547,7 +760,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         h_svg = 38 + len(filas) * RH + len({R["sys"]["ciudad"] for R in filas}) * 18 + 22
         # rejilla de horas cada 3 h (referida a la hora local de Bogotá)
         # eje de horas: una línea por hora en la ventana corta (reporte del día), cada 3 h hasta 36 h y cada 6 h en periodos largos, donde la medianoche lleva el día
-        paso_g = 3600000 if span <= 18 * 3600000 else (3 * 3600000 if span <= 36 * 3600000 else 6 * 3600000)
+        paso_g = 3600000 if span <= 18 * 3600000 else (3 * 3600000 if span <= 36 * 3600000 else (6 * 3600000 if span <= 8 * 86400000 else 86400000))
         t_h = W0 - (W0 + 5 * 3600000) % paso_g + paso_g
         if span > 36 * 3600000:     # periodo largo: marcas en horas locales redondas (00, 06, 12, 18) para que la medianoche lleve el día
             t_h = ((W0 - 5 * 3600000) // paso_g) * paso_g + 5 * 3600000
@@ -561,7 +774,11 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             _f = fecha_bog(t_h); _medianoche = _f.hour == 0 and _f.minute == 0
             _dia_g = _medianoche and span > 36 * 3600000          # en periodos largos la medianoche marca el cambio de día con una línea más visible
             fecha_g = f'<text class="ax ax-f" x="{x:.1f}" y="11" text-anchor="middle">{DIAS[_f.weekday()][:3]} {_f.day} {MESES[_f.month - 1]}</text>' if (fecha_en_todas or primera or _medianoche) else ""
-            svg.append(f'<line class="grid{" dia" if _dia_g else ""}" x1="{x:.1f}" y1="28" x2="{x:.1f}" y2="{h_svg - 20}"/>{fecha_g}<text class="ax{" ax-d" if _dia_g else ""}" x="{x:.1f}" y="24" text-anchor="middle">{hb(t_h)}</text>')
+            _hora_t = hb(t_h)
+            if paso_g == 86400000:
+                fecha_g = f'<text class="ax ax-f" x="{x:.1f}" y="11" text-anchor="middle">{MESES[_f.month - 1]}</text>' if (primera or _f.day == 1) else ""
+                _hora_t = f"{DIAS[_f.weekday()][:3]} {_f.day}"
+            svg.append(f'<line class="grid{" dia" if _dia_g else ""}" x1="{x:.1f}" y1="28" x2="{x:.1f}" y2="{h_svg - 20}"/>{fecha_g}<text class="ax{" ax-d" if _dia_g else ""}" x="{x:.1f}" y="24" text-anchor="middle">{_hora_t}</text>')
             primera = False
             t_h += paso_g
         ciu_ant = None
@@ -674,7 +891,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             ok_c = [R for R in g if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
             cob_c = 100 * sum(R["pv_tot"] for R in ok_c) / sum(R["cons_cli"] for R in ok_c) if ok_c else None
             cy_c = [R for R in g if R["pv_tot"] is not None and cap_ok(R)]
-            y_c = sum(R["pv_tot"] for R in cy_c) / ndias / sum(R["sys"]["cap"] for R in cy_c) * 365 if cy_c else None
+            y_c = sum(R["pv_tot"] for R in cy_c) / sum(max(1, R["pv_n"]) * R["sys"]["cap"] for R in cy_c) * 365 if cy_c else None
             pat_c = patron_yield(c)
             res_c = sum(1 for R in list(g) + [Q for Q in RB if Q["sys"]["ciudad"] == c] if R["soc_ult"] and R["soc_ult"][1] <= RESERVA)
             ico = _ico[peor]
@@ -702,7 +919,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                       f'<rect class="gb con" x="{GX}" y="{yy + 24}" width="{max(wb, 2):.1f}" height="16" rx="3"><title>{esc(nom)} · consumo de los clientes {dec(b, 0)} kWh</title></rect><text class="sm" x="{GX + wb + 6:.1f}" y="{yy + 37}">{dec(b, 0)} kWh</text>'
                       f'<text class="lbl" x="{GX + GW + 150}" y="{yy + 28}" text-anchor="end">{dec(100 * a / b, 0)} %</text>')
         sg.append(f'<text class="ax" x="{GX + GW + 150}" y="{6}" text-anchor="end">cobertura</text>')
-        grafico_gc = f'<div class="scroll"><svg viewBox="0 0 {GX + GW + 160} {16 + len(filas_g) * GH}" role="img" aria-label="Generación FV frente al consumo de los clientes por ciudad" style="min-width:720px">{"".join(sg)}</svg></div><div class="legend"><span><i class="lg gen"></i>Generación FV (balance de medidores)</span><span><i class="lg con"></i>Consumo de los clientes</span><span>cobertura = generación ÷ consumo</span></div>'
+        grafico_gc = f'<div class="scroll"><svg viewBox="0 0 {GX + GW + 160} {16 + len(filas_g) * GH}" role="img" aria-label="Generación FV frente al consumo de los clientes por ciudad" style="min-width:720px">{"".join(sg)}</svg></div><div class="legend"><span><i class="lg gen"></i>Generación FV (balance de medidores)</span><span><i class="lg con"></i>Consumo de los clientes</span><span>cobertura = generación ÷ consumo{_txt_cob}</span></div>'
         # batería en el corte más largo de cada casa: SOC al inicio → al final (con el mínimo), ordenadas de menor a mayor carga inicial
         dm = []
         for R in _cs:
@@ -810,7 +1027,18 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; incluye todos los eventos de red de la ventana</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)
         d_ult = dias[-1][0]
-        pts5 = sorted(((R, R["lleno"].get(d_ult)) for R in RS if R.get("lleno") and R["lleno"].get(d_ult) is not None), key=lambda x: x[1])
+        _ll_info = {}
+        if ndias > 3:
+            def _med_ll(R):
+                hs = sorted(fecha_bog(t_).hour + fecha_bog(t_).minute / 60 for t_ in R.get("lleno", {}).values() if t_ is not None)
+                if not hs: return None
+                m_ = hs[len(hs) // 2] if len(hs) % 2 else (hs[len(hs) // 2 - 1] + hs[len(hs) // 2]) / 2
+                _ll_info[id(R)] = (len(hs), len(R.get("lleno", {})))
+                return d_ult + int(round(m_ * 4)) * 900000       # hora del día mediana (a 15 min, como el muestreo), sobre un día de referencia
+            pts5 = sorted(((R, _med_ll(R)) for R in RS if R.get("lleno")), key=lambda x: (x[1] is None, x[1]))
+            pts5 = [(R, t_) for R, t_ in pts5 if t_ is not None]
+        else:
+            pts5 = sorted(((R, R["lleno"].get(d_ult)) for R in RS if R.get("lleno") and R["lleno"].get(d_ult) is not None), key=lambda x: x[1])
         n_no_llena = len(RS) - len(pts5)
         LXX, LW5, LH5 = 92, 760, 17
         hrs0, hrs1 = 6, 18
@@ -825,7 +1053,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             yy = 14 + i * LH5 + LH5 / 2
             hh_ = fecha_bog(t).hour
             niv = "w" if hh_ < LLENO_ANTES_H else ("t" if hh_ < LLENO_TARDE_H else "ok")
-            tip = f'{R["sys"]["casa"]} · batería a {BATERIA_LLENA_SOC} % a las {hb(t)}' + (" · producción limitada" if niv == "w" else (" · producción limitada en la tarde" if niv == "t" else ""))
+            tip = (f'{R["sys"]["casa"]} · hora mediana en que la batería llegó a {BATERIA_LLENA_SOC} % ({_ll_info[id(R)][0]} de {_ll_info[id(R)][1]} días): {hb(t)}' if id(R) in _ll_info else f'{R["sys"]["casa"]} · batería a {BATERIA_LLENA_SOC} % a las {hb(t)}') + (" · producción limitada" if niv == "w" else (" · producción limitada en la tarde" if niv == "t" else ""))
             s5.append(f'<g class="dm"><title>{esc(tip)}</title><text class="sm" x="{LXX - 8}" y="{yy + 4:.1f}" text-anchor="end">{esc(R["sys"]["casa"])}</text><line class="lane" x1="{LXX}" y1="{yy + LH5 / 2:.1f}" x2="{LXX + LW5}" y2="{yy + LH5 / 2:.1f}"/><circle class="yd {niv}" cx="{xh(t):.1f}" cy="{yy:.1f}" r="5"/><text class="soc-n" x="{xh(t) + 9:.1f}" y="{yy + 4:.1f}">{hb(t)}</text></g>')
         grafico_ll = f'<div class="scroll"><svg viewBox="0 0 {LXX + LW5 + 10} {14 + len(pts5) * LH5 + 22}" role="img" aria-label="Hora en que la batería de cada casa llegó a carga completa" style="min-width:720px">{"".join(s5)}</svg></div><div class="legend"><span><i class="dotl w"></i>▲ antes de las {LLENO_ANTES_H}:00 (pierde producción)</span><span><i class="dotl t"></i>entre las {LLENO_ANTES_H}:00 y las {LLENO_TARDE_H}:00</span><span><i class="dotl ok"></i>después de las {LLENO_TARDE_H}:00</span><span>línea punteada: las {LLENO_ANTES_H}:00 · {_pl(n_no_llena, "sistema", "sistemas")} no llegó a {BATERIA_LLENA_SOC} %</span></div>' if pts5 else ""
         # ---- dispersión: generación del día frente a potencia instalada (kWp), con las líneas del yield patrón
@@ -959,9 +1187,22 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Ranking de las casas por energía exportada</h3>' + grafico_rk) if grafico_rk else ''}
     <h3>Yield frente al patrón de su región</h3>
     {grafico_y}
-    {('<h3>Hora en que la batería llegó a carga completa</h3>' + grafico_ll) if grafico_ll else ''}
+    {('<h3>Hora en que la batería llegó a carga completa' + (' <span class="h3s">hora mediana de los días del periodo en que llegó a 99 %</span>' if ndias > 3 else '') + '</h3>' + grafico_ll) if grafico_ll else ''}
   </div>
 </section>'''
+    def _rango_dias(ix):
+        ix = sorted(ix); g = [[ix[0]]]
+        for i_ in ix[1:]:
+            (g[-1].append(i_) if i_ == g[-1][-1] + 1 else g.append([i_]))
+        out = []
+        for gr in g:
+            a_, b_ = fecha_bog(dias[gr[0]][0]), fecha_bog(dias[gr[-1]][0])
+            out.append(f"{a_.day} {MESES[a_.month-1]}" if len(gr) == 1 else (f"{a_.day} al {b_.day} {MESES[b_.month-1]}" if a_.month == b_.month else f"{a_.day} {MESES[a_.month-1]} al {b_.day} {MESES[b_.month-1]}"))
+        return " y ".join(out)
+    _sc = [(R["sys"]["casa"], [i_ for i_, (d0_, _) in enumerate(dias) if R["pv"].get(d0_) is None]) for R in RS]
+    _sc = [(c_, ix_) for c_, ix_ in _sc if ix_]
+    _nota_cierres = ("A los medidores que no entregaron el cierre diario de las 00:00 (" + "; ".join(f"{c_}: {_rango_dias(ix_)}" for c_, ix_ in _sc) + ") no se les calcula la generación de esos días y no se reemplaza por otro dato.") if _sc else "Todos los medidores entregaron el cierre diario de las 00:00 de cada día de la ventana."
+    _nota_ventana = (f"La ventana de este reporte va del {hbd(W0)} al {hbd(W1)} (hora de Bogotá): cada día se cuenta de 00:00 a 24:00 y no hay horas sin cubrir." if W0 == dias[0][0] else "El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.")
     lim_bat = (" Las casas que solo tienen baterías instaladas (" + ", ".join(R["sys"]["casa"] for R in RB) + ") se muestran en su propia tabla y no cuentan en generación, yield, cobertura ni exportación.") if RB else ""
     estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
@@ -980,14 +1221,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>{horas:.0f} h de operación</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
 </header>
 
-<div class="kpis">
-  {k_sis}
-  {k_res}
-  {k_pv}
-  {k_yield}
-  {k_cob}
-  {k_exp}
-</div>
+{bloque_medidores}
 
 {sec_vis}
 
@@ -1036,9 +1270,9 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     <p>Los medidores de red sin tensión envían sus eventos guardados solo cuando vuelve la red. Un corte en curso se detecta con el inversor (entrada de red por debajo de 5 V) y su hora de inicio es aproximada (≈) hasta que vuelva la red.</p>
     <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes.</p>
     <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
-    <p>El lunes, la ventana va desde el viernes a las 07:00 hasta el lunes a las 07:00, para no dejar horas sin cubrir entre reportes.</p>
+    <p>{_nota_ventana}</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>
-    <p>Si a un medidor aún no le llegó el cierre diario de las 00:00 (hoy, Casa 9G y Casa 108), su generación del día queda sin calcular y no se reemplaza por otro dato. La generación de todos los sistemas se calcula con el balance de medidores.{lim_bat}</p>
+    <p>{_nota_cierres} La generación de todos los sistemas se calcula con el balance de medidores.{lim_bat}</p>
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
