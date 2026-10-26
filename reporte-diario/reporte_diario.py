@@ -19,6 +19,7 @@ MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 RESERVA = 20.0                        # SOC a partir del cual se considera la batería en reserva (instrucción del usuario: 20 %); también define "batería cargada" (SOC > RESERVA)
 GAP_RADIO = 75000                     # ms: un hueco de tensión se asocia al evento de red más cercano dentro de este radio
+RED_PRESENTE_V = 90                   # V: desde esta tensión el medidor de red o el inversor ven la red (la misma de red_presente); sirve para estimar el inicio de un corte sin `po`
 PV_MIN_KWH = 5.0                      # una casa cuyo inversor nunca pasa de este valor diario (energyPD) no tiene FV instalada: solo baterías de respaldo
 PV_MIN_DIAS = 5                       # días con dato necesarios para decidir que una casa no tiene FV
 EXCLUIDOS = []                        # (ciudad, casa, motivo) de lo que se dejó fuera del reporte; lo llena main()
@@ -162,6 +163,16 @@ def pares(ev):
     if o is not None:
         out.append([o, None])
     return out
+
+def inicio_sin_po(b, W0, *series):
+    """Inicio estimado (ms) de un corte que terminó con un `pr` en b sin que llegara su `po`, y si viene de antes de la ventana.
+    Cada serie es [(ts, tensión)] del medidor de red o de la entrada de red del inversor: el corte empezó justo después de la última muestra con red
+    (≥ RED_PRESENTE_V) anterior a b, media muestra de un minuto más tarde. Si ninguna serie tuvo red antes de b en el historial consultado, el corte viene de antes y cuenta desde W0."""
+    t_ok = max((t for L in series for t, v in L if t < b and isinstance(v, float) and v >= RED_PRESENTE_V), default=None)
+    if t_ok is None:
+        return W0, True
+    a = min(t_ok + 30000, b)
+    return (W0, True) if a < W0 else (a, False)
 
 def antes(L, t, tol=1800000):
     c = [(k, v) for k, v in L if k <= t and t - k <= tol]
@@ -479,8 +490,12 @@ def analizar(s, D, W0, W1, dias):
     cortes = []
     for a, b in pares(ev_red):
         if a is None:
-            if b is not None and b >= W0:          # el corte empezó antes del historial consultado
-                cortes.append(dict(a=W0, b=b, abierto=False, ant=True, estimado=True))
+            if b is not None and b >= W0:
+                # `pr` sin su `po`: el medidor no registró la caída (o el corte empezó antes del historial consultado); el inicio se estima con la tensión, no con el inicio de la ventana
+                a_est, ant = inicio_sin_po(b, W0, rv, vga)
+                if not ant and motivo_evento_fuera(s, a_est, "corte de red"):
+                    continue
+                cortes.append(dict(a=a_est, b=b, abierto=False, ant=ant, estimado=True))
             continue
         fin_c = b if b is not None else W1
         if fin_c < W0 or a > W1:
