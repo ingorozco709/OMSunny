@@ -57,6 +57,12 @@
       "desde": "2026-10-16T00:00",
       "hasta": "2026-10-17T00:00",
       "motivo": "Balanceo de cargas en la casa el viernes 16 oct, para evitar el disparo de la protección de carga del sistema"
+    },
+    {
+      "casa": "Casa 121 CR",
+      "desde": "2026-10-24T00:00",
+      "hasta": "2026-10-25T00:00",
+      "motivo": "Cambio del breaker de carga de 50 A de la casa el sábado 24 oct, por los disparos de la protección de carga del sistema"
     }
   ]
 }
