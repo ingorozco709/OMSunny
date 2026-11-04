@@ -963,3 +963,22 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** el inicio de un corte que llega solo con su `pr` se estima con la última muestra con red (≥ 90 V) del medidor de red o de la entrada de red del inversor anterior al `pr`, más 30 s; queda marcado con ≈. Para esas seis casas el corte pasa a 24-oct 18:20:30 → 19:26, 1 h 05 min, igual que las otras 20 casas de Cali (cuyo `po` está entre las 18:20:04 y las 18:20:23). Solo si ni el medidor ni el inversor vieron red en el historial consultado se asume que el corte venía de antes y se cuenta desde el inicio de la ventana, como antes. Con el `po` presente el resultado no cambia. Probado con los datos guardados de cuatro lecturas (22 y 23-oct sin cambios; fin de semana, solo esas seis casas) y con la lectura completa de las 11:05. Lección: los eventos de un medidor pueden llegar a Metrum con horas de retraso; ante un corte larguísimo que empieza justo al inicio de la ventana, comparar con la tensión y volver a leer más tarde.
 
 **Dónde está el código:** `inicio_sin_po` y `RED_PRESENTE_V` en `reporte-diario/reporte_diario.py`; se usa en `analizar`, en la lectura de los cortes del medidor de red.
+
+## 2026-11-04 — Casa 101 entra al reporte (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** "Por favor incluye la casa 101" (4-nov), después de preguntar qué sistemas quedaban excluidos del reporte (los dos pilotos y las Casas 6, 101 y 205).
+
+**Qué la originó:** la Casa 101 (Terra by Kaia, Barranquilla; Livoltek HP3-10KL2) estaba fuera desde el 20-oct por ser nueva y no estar entregada a operaciones (entrada del 2026-10-20). El usuario pide ahora que entre al reporte, tal como esa entrada prevé ("hasta que yo te lo pida").
+
+**Cómo se aplicó:**
+- `exclusiones.json` → la Casa 101 sale de `"fuera"` (queda vacío) y pasa a `"incluir"`. Hace falta `"incluir"` porque `potencia_instalada.json` aún no tiene su kWp: sin esa entrada, la regla de casa nueva (`MOTIVO_NUEVA`) la volvería a dejar fuera.
+- Sin kWp, la casa entra con cortes, respaldo, baterías, exportación, comunicación y generación por balance de medidores, pero sin yield ni % del patrón (no se inventa un kWp). El medidor de yield cuenta solo los sistemas con kWp (47 el 4-nov); la cobertura solar sí la cuenta (48 de 49 ese día, porque la Casa 382p no entregó el cierre diario).
+- Sistemas esperados en el resumen JSON: 49 (antes 48). La rutina diaria se actualizó con esa cifra y con la Casa 101 como incluida; las Casas 6 y 205 siguen fuera como casas nuevas sin kWp.
+- Pendiente: el kWp de la Casa 101. Cuando llegue, agregarlo a `potencia_instalada.json` (clave en minúsculas, `casa 101`); entonces se puede quitar de `"incluir"` y pasa a tener yield y alerta "baja vs patrón".
+- No se tocó el tablero de baterías (artifact aparte), que sigue con el criterio anterior de no incluir casas nuevas; queda por decidir si incluye la 101.
+
+**Efecto con los datos del 4-nov (ventana 3-nov 07:00 a 4-nov 07:00):** el reporte pasa de 48 a 49 sistemas; la generación FV, de 667 a 674 kWh (la 101 aportó 7,2 kWh); la cobertura solar, de 71,6 % a 68,4 % (su consumo fue de 55,0 kWh: cobertura de 13 %); y la importación, de 261 a 311 kWh. Sin cambios en los cortes (15 en 1 evento), el yield (940) ni el respaldo. La Casa 101 no tuvo cortes, estados de falla ni códigos de evento y terminó con la batería en 15 %.
+
+**Dónde está el código:** rama `nombre in manual_in` de `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.

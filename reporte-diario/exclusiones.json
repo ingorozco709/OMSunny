@@ -4,11 +4,10 @@
     "Casa 35",
     "Casa 57",
     "Casa 104",
-    "Casa 447p"
-  ],
-  "fuera": [
+    "Casa 447p",
     "Casa 101"
   ],
+  "fuera": [],
   "eventos_fuera": [
     {
       "casa": "Casa 9G",
