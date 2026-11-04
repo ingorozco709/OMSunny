@@ -1016,3 +1016,22 @@ Reportes Operativos Periódicos.
 **Efecto con los datos del 4-nov (ventana 3-nov 07:00 a 4-nov 07:00):** el resumen (`resumen_diario.json`) no cambia; la página crece de unos 193 KB a unos 231 KB. Estado: 32 sistemas verdes, 12 con cortes en la ventana (los 15 cortes del evento de Turbaco, menos los que además tienen otro incidente), 4 con falla o código de evento del inversor y 1 sin datos; 25 con anillo de batería en reserva.
 
 **Dónde está el código:** `reporte-diario/mapa_sistemas.py` y `_estado_mapa` en `reporte-diario/reporte_html.py` (sección «Mapa de los sistemas» del README).
+
+## 2026-11-04 — Irradiancia: cada sistema con sus coordenadas y no un punto por ciudad (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Pedido del usuario (4-nov):** «que las tengas en cuenta para el tema de la irradiancia», junto con el mapa, después de confirmar que Metrum trae las coordenadas de cada sistema (entrada anterior).
+
+**Regla:** la irradiancia de un sistema sale de **sus coordenadas** (`latDev` y `lonDev` del gateway de su casa), no de un punto por ciudad. Herramienta: `reporte-diario/irradiancia_goes.py` (GOES-19, producto ABI-L2-DSRF, ventana de 3 × 3 píxeles; los sitios por defecto son los 49 sistemas del reporte con sus coordenadas de Metrum). Probada contra la descarga por sistema del 5-oct, 12:00 hora de Bogotá: 24 valores, ninguna diferencia. Las salidas van fuera del repositorio (son ubicaciones de viviendas de clientes).
+
+**Qué se usaba antes:** el análisis de curtailment del 1-20 oct (`modelo.py`) tomaba la irradiancia de tres «cielos» con puntos escritos a mano en `goes.py`: Cali (3,33 / −76,54), Turbaco (10,33 / −75,42, también para el sistema de Cartagena, «a ~20 km») y Barranquilla (10,98 / −74,82). Distancia de los sistemas al punto que se usaba: Cali, mediana de 1,3 km y máxima de 3,1; Turbaco, 2,0; Barranquilla, 6,4; la Casa 78T (Cartagena), 21,3 km. Con las coordenadas, los 49 sistemas caen en 9 píxeles distintos de GOES (Cali 4, Barranquilla 2, Turbaco 2, Cartagena 1).
+
+**Qué cambia (GOES-19 del 1 al 20 oct, de 05:00 a 18:59 hora de Bogotá, descarga nueva por sistema de 3 107 MB):**
+- Acumulado de los 20 días frente al punto que se usaba: Cali (26 sistemas) −0,4 % a +0,6 %; Turbaco (16) −0,5 % a 0,0 %; Barranquilla (6) +0,2 % a +0,6 %; Casa 78T (Cartagena) +2,3 %. Solo 1 de 49 sistemas cambia más de 1 %.
+- Día a día: diferencia típica de 0,7 % en Cali, 0,0 % en Turbaco, 3,2 % en Barranquilla y 4,4 % en la Casa 78T; la mayor en un día fue de 3 % en Cali y Turbaco, 11 % en Barranquilla y 28 % en la Casa 78T.
+- Lectura: los resultados del curtailment del 1-20 oct **no deberían cambiar de forma material** (el modelo calibra a cada sistema en sus ranuras sin limitación, así que el nivel absoluto pesa menos que el momento de las nubes); las excepciones esperables son la Casa 78T y algunos días de Barranquilla. No se recalculó el modelo ni el libro de curtailment: queda por decidir con el usuario.
+- **Casa 104** (análisis de la Casa 104, Open-Meteo): con sus coordenadas Open-Meteo devuelve la misma celda y la misma serie que el punto de Cali que ya se usaba (0 horas distintas de 3 768): sin cambios. Pero Open-Meteo y GOES difieren como fuente: para la Casa 104 el acumulado del 1-20 oct es de 99,0 kWh/m² con Open-Meteo y 106,1 con GOES (+7,2 %; diferencia diaria típica de 12,6 %). Es consistente con que el «escenario alto» del reporte de la Casa 104 (PR de 0,75 con Open-Meteo) dé el potencial del análisis del equipo: 0,75 × 99,0 ≈ 0,70 × 106,1, unos 309 kWh con 4,165 kWp. Para comparar la Casa 104 con el análisis de curtailment conviene usar la misma fuente en los dos.
+- Open-Meteo (API de radiación satelital, malla de ~5 km) ubica los 49 sistemas en solo 4 celdas, una por ciudad: con esa fuente las coordenadas de cada casa no aportan nada frente a un punto por ciudad. Para distinguir casas dentro de una ciudad hay que usar GOES (píxeles de ~2 km).
+
+**Dónde está el código:** `reporte-diario/irradiancia_goes.py` (sección «Irradiancia por sitio» del README).
