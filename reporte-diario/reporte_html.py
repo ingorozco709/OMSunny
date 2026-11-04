@@ -100,6 +100,11 @@ try:                         # mapa de los sistemas (mapa_sistemas.py): opcional
 except Exception as _e_mapa:
     MAPA = None
     print(f"aviso: el mapa de sistemas no está disponible ({_e_mapa})", file=sys.stderr)
+try:                         # mapa único con zoom (mapa_zoom.py): opcional; si falla, el reporte usa los recuadros de mapa_sistemas.py
+    import mapa_zoom as MAPAZ
+except Exception as _e_mz:
+    MAPAZ = None
+    print(f"aviso: el mapa con zoom no está disponible ({_e_mz})", file=sys.stderr)
 
 MICRO_CORTE_MAX = 60    # s: un hueco de tensión a mitad del corte (tipo "durante": ni al caer ni al volver la red) de hasta esta duración (1 min incluido) es un "micro corte" y su franja roja lleva una etiqueta oculta (cursor o toque) con los segundos que duró; el medidor da la hora en segundos enteros, así que 59 s y 60 s no se distinguen
 
@@ -301,7 +306,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # RB: casas que solo tienen baterías (sin FV). Entran en la tabla propia, en baterías en reserva y en los
     # eventos del inversor, pero no en generación, yield, cobertura, exportación ni en los totales de cortes.
     RB = sorted(RB, key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
-    css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS + (MAPA.CSS if MAPA else "")
+    css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS + (MAPA.CSS if MAPA else "") + (MAPAZ.CSS if MAPAZ else "")
     n_sys = len(RS)
     ciudades = sorted({R["sys"]["ciudad"] for R in RS}, key=ordenar_ciudad)
     ndias = len(dias)
@@ -791,6 +796,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # ------------------------------------------------ panel gráfico: semáforo, línea de tiempo, baterías y yield
     sec_vis = ""
     mapa_blq = ""
+    mapa_js = ""
     if VISUAL:
         _niv = {"Respaldo total": "g", "Respaldo total con transferencia": "g", "Retardo de transferencia": "w", "Caída durante el respaldo": "c", "Sin respaldo": "c"}
         _ico = {"g": "✓", "w": "▲", "c": "✕"}
@@ -1246,9 +1252,25 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                              "b": [("s", f"reserva ({RESERVA:.0f} % o menos)"), ("w", f"{RESERVA:.0f} a 50 %"), ("g", "más de 50 %"), ("o", "sin dato")]}
                 _bases_mapa = MAPA.cargar_bases(os.path.join(HERE, "mapas_base"))
                 if _it:
-                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, f"batería en reserva ({RESERVA:.0f} % o menos)", _bases_mapa)
-                                + '<p class="note">Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» colorea el incidente más grave al corte del reporte, con el orden de «Puntos más relevantes», y marca con un anillo la batería en reserva; «Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. '
-                                  'Al pasar el cursor o tocar un punto sale el estado y su detalle. El norte va arriba; cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad. Mapa base dibujado con datos de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL), guardados en <code>mapas_base/</code>; donde casi no hay nada mapeado se dibuja una rejilla.</p>')
+                    _txt_res = f"batería en reserva ({RESERVA:.0f} % o menos)"
+                    _nota_mapa = ('Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» colorea el incidente más grave al corte del reporte, con el orden de «Puntos más relevantes», y marca con un anillo la batería en reserva; '
+                                  '«Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. ')
+                    _bloque_mapa = ""
+                    if MAPAZ:                                                  # un solo mapa con zoom; si falla, los recuadros de siempre
+                        try:
+                            _bloque_mapa = MAPAZ.bloque_mapa_zoom(_it, _ley_mapa, _txt_res, _bases_mapa)
+                        except Exception as _e:
+                            print(f"aviso: no se pudo armar el mapa con zoom ({_e}); se usan los recuadros por conjunto", file=sys.stderr)
+                    if _bloque_mapa:
+                        mapa_js = MAPAZ.JS
+                        _nota_mapa += ('Arrastra para mover el mapa y acércalo con los botones + y −, Ctrl + rueda o dos dedos (en el celular un dedo sigue desplazando la página); los puntos que se tocan se agrupan en una rosca con el número de sistemas y la mezcla de estados, y se separan al acercar. '
+                                       'Pasa el cursor o toca un punto o un grupo para ver su detalle; «Ir a» lleva a una ciudad o a un conjunto. El norte va arriba. ')
+                    else:
+                        _bloque_mapa = MAPA.bloque_mapa(_it, _ley_mapa, _txt_res, _bases_mapa)
+                        mapa_js = MAPA.JS
+                        _nota_mapa += ('Al pasar el cursor o tocar un punto sale el estado y su detalle. El norte va arriba; cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad. ')
+                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + _bloque_mapa
+                                + '<p class="note">' + _nota_mapa + 'Mapa base dibujado con datos de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL), guardados en <code>mapas_base/</code>, y contorno de países y ciudades de Natural Earth (dominio público); donde casi no hay nada mapeado queda en blanco o con rejilla.</p>')
             except Exception as _e:
                 print(f"aviso: no se pudo armar el mapa de sistemas ({_e})", file=sys.stderr)
         sec_vis = f'''<section>
@@ -1288,7 +1310,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     lim_bat = (" Las casas que solo tienen baterías instaladas (" + ", ".join(R["sys"]["casa"] for R in RB) + ") se muestran en su propia tabla y no cuentan en generación, yield, cobertura ni exportación.") if RB else ""
     estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
-    js_mapa = ('<script>' + MAPA.JS + '</script>') if (MAPA and mapa_blq) else ''
+    js_mapa = ('<script>' + mapa_js + '</script>') if (mapa_js and mapa_blq) else ''
     gen = fecha_bog(int(time.time() * 1000))
     pagina = f'''<title>{esc(titulo)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">

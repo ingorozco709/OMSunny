@@ -1056,3 +1056,21 @@ Reportes Operativos Periódicos.
 **Privacidad:** el mapa base más los puntos muestran la ubicación relativa de las casas dentro de cada conjunto (sin latitud ni longitud escritas y sin direcciones); los archivos de `mapas_base/` traen solo el área de cada recuadro y datos públicos de OpenStreetMap, no las casas. Quien vea el reporte ve esa ubicación relativa: antes de compartirlo más allá del equipo conviene decidir si se dejan los números de casa en el mapa.
 
 **Dónde está el código:** `reporte-diario/mapa_sistemas.py` (`_capa_base`, `cargar_bases`), `reporte-diario/mapas_base.py` y `reporte-diario/mapas_base/` (sección «Mapa de los sistemas» del README).
+
+## 2026-11-04 — Un solo mapa con zoom para todos los sistemas (a pedido del usuario)
+
+**Aplica a:** Generador de Reportes Operativos Periódicos, Analista de Disponibilidad y Reportes, Monitor de Salud de Flota.
+
+**Pedido del usuario (4-nov):** «Es posible mostrar todos los sistemas en un solo mapa donde se puede hacer zoom para ver más cerca los sistemas?» (después del mapa por recuadros con mapa base de OpenStreetMap de la entrada anterior).
+
+**Regla:** el mapa de la «Vista rápida» es un solo lienzo con zoom, desde todos los sistemas hasta una casa, y no un recuadro por conjunto. Los recuadros por conjunto (`mapa_sistemas.py`) quedan como respaldo si el módulo nuevo falla.
+
+**Cómo se aplicó:**
+- `reporte-diario/mapa_zoom.py` arma el bloque y `reporte-diario/mapa_zoom.js` lo dibuja en un canvas (Web Mercator, sin librerías ni teselas, sin pedir nada a internet): contorno de países y ciudades de Natural Earth de lejos; calles, agua, verde, edificios, senderos y piscinas de OpenStreetMap a medida que se acerca; los puntos que se tocarían se agrupan en una rosca con el número de sistemas y la mezcla de estados. Mismas vistas, leyendas y textos que el mapa por recuadros; botones «Ir a» por ciudad y conjunto.
+- Gestos: arrastrar con el ratón; Ctrl + rueda, botones + y −, doble clic o teclado para acercar; en el celular dos dedos (un dedo sigue desplazando la página, para que el mapa no atrape el scroll del reporte). Probado en Chromium de escritorio y con tacto emulado (toque, pellizco, dos dedos, un dedo); no probado en un celular real ni en el visor del artefacto.
+- `reporte-diario/mapas_base.py` ganó `--zoom` (detalle ±300 m alrededor de las casas de «otros conjuntos» y contexto de Turbaco, Barranquilla y Cartagena) y `--geo` (contorno de países y ciudades de Natural Earth); los archivos nuevos van en `reporte-diario/mapas_base/`.
+- La página del reporte pasa de unos 334 KB a unos 618 KB (los vectores van dentro del bloque). Los fotogramas cuestan de 2 a 8 ms en escritorio y hasta unos 35 ms con la CPU 4 veces más lenta (celular de gama media) en los zooms de ciudad.
+
+**Privacidad:** los datos del mapa llevan las **coordenadas de las casas** dentro del código de la página (los recuadros solo dibujaban posiciones relativas). El reporte diario se comparte con «cualquiera con el enlace»: conviene decidir con el usuario si se deja así, se restringe quién lo ve o se redondean las coordenadas.
+
+**Dónde está el código:** `reporte-diario/mapa_zoom.py`, `reporte-diario/mapa_zoom.js`, `reporte-diario/mapas_base.py` y `reporte_html.py` (sección «Mapa de los sistemas» del README).
