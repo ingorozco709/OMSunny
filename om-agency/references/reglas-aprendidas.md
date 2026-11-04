@@ -982,3 +982,18 @@ Reportes Operativos Periódicos.
 **Efecto con los datos del 4-nov (ventana 3-nov 07:00 a 4-nov 07:00):** el reporte pasa de 48 a 49 sistemas; la generación FV, de 667 a 674 kWh (la 101 aportó 7,2 kWh); la cobertura solar, de 71,6 % a 68,4 % (su consumo fue de 55,0 kWh: cobertura de 13 %); y la importación, de 261 a 311 kWh. Sin cambios en los cortes (15 en 1 evento), el yield (940) ni el respaldo. La Casa 101 no tuvo cortes, estados de falla ni códigos de evento y terminó con la batería en 15 %.
 
 **Dónde está el código:** rama `nombre in manual_in` de `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-11-04 — kWp de la Casa 101: 3,57 kWp (dato del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Dato del usuario:** "La casa 101 tiene 3,57kWp" (4-nov), respuesta al pendiente de la entrada anterior (Casa 101 incluida sin kWp).
+
+**Cómo se aplicó:**
+- `potencia_instalada.json` → `"casa 101": 3.57` (pico DC, como las demás casas).
+- La Casa 101 sale de `"incluir"` en `exclusiones.json`: con kWp registrado la regla de casa nueva (`MOTIVO_NUEVA`) no la saca, y la regla de "sin generación FV" no la toma por solo baterías (su máximo diario reciente por balance de medidores fue de 24,8 kWh, frente al umbral de 5 kWh). Probado con los datos del 4-nov: 49 sistemas, `solo_baterias` vacío y excluidos solo los pilotos y las Casas 6 y 205. Si más adelante produjera menos de 5 kWh al día durante 5 o más días, habría que volver a ponerla en `"incluir"`.
+- La Casa 101 ahora tiene yield y % del patrón: el 3-nov generó 7,2 kWh, 740 kWh/kWp·año, 56 % del patrón de la costa (1323), con la alerta "baja vs patrón". Con ella, el yield del portafolio pasa de 940 a 937 kWh/kWp·año, el medidor de yield cuenta 48 sistemas (antes 47) y hay 33 sistemas con producción baja (antes 32).
+- Consumo: la Casa 101 consume mucho más que el resto (55,0 kWh el 3-nov; entre 27 y 75 kWh en los días previos), por eso su cobertura solar es de 13 % y baja la del portafolio.
+- La rutina diaria se actualizó: la 101 es un sistema con FV normal de 3,57 kWp (49 sistemas).
+
+**Dónde está el dato:** `reporte-diario/potencia_instalada.json`; lista en `reporte-diario/exclusiones.json`.
