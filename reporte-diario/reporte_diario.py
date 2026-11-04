@@ -81,7 +81,15 @@ def listar_dispositivos():
             return out
         page += 1
 
-ATTR_KEYS = "city,zone,gateway,mettype,spcus,invbrand,invmodel,invcap,invtype"
+ATTR_KEYS = "city,zone,gateway,mettype,spcus,invbrand,invmodel,invcap,invtype,latDev,lonDev"
+
+def coordenadas(a):
+    """Latitud y longitud del gateway (atributos `latDev` y `lonDev` en Metrum; solo el gateway las trae). (None, None) si faltan o no son plausibles para Colombia."""
+    try:
+        la, lo = float(a.get("latDev")), float(a.get("lonDev"))
+    except (TypeError, ValueError):
+        return None, None
+    return (la, lo) if (-5 < la < 14 and -82 < lo < -66) else (None, None)
 
 def atributos(dv):
     c, a = req("GET", f"/api/plugins/telemetry/DEVICE/{dv['id']['id']}/values/attributes?keys={ATTR_KEYS}")
@@ -240,7 +248,7 @@ def construir_sistemas(devs, attrs):
         ciudad = a.get("city") or "SIN CIUDAD"
         if not casa:
             continue
-        s = SYS.setdefault((ciudad, casa), dict(ciudad=ciudad, zona=a.get("zone") or "", casa=casa, inv=[], red=[], solar=[], pul=[], marca="", modelo="", cap=None))
+        s = SYS.setdefault((ciudad, casa), dict(ciudad=ciudad, zona=a.get("zone") or "", casa=casa, inv=[], red=[], solar=[], pul=[], marca="", modelo="", cap=None, lat=None, lon=None, zona_gw=None))
         s["zona"] = s["zona"] or a.get("zone") or ""
         rec = dict(id=dv["id"]["id"], name=dv["name"], attrs=a)
         if dv["type"] == "inverter":
@@ -249,6 +257,9 @@ def construir_sistemas(devs, attrs):
             (s["red"] if a.get("mettype") == "red" else s["solar"]).append(rec)
         elif dv["type"] == "pulsar":
             s["pul"].append(rec)
+            if s["lat"] is None:          # coordenadas de la casa: las del primer gateway que las tenga (se usan en el mapa y para la irradiancia por sitio)
+                s["lat"], s["lon"] = coordenadas(a)
+                s["zona_gw"] = a.get("zone") or None      # conjunto según el gateway (el de las coordenadas); en Metrum la Casa 73 tiene dispositivos en dos zonas y su gateway dice LLANOS DE PANCE
     return SYS
 
 def cargar_exclusiones():

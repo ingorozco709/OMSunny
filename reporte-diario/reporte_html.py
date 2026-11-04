@@ -93,6 +93,14 @@ document.addEventListener('click',function(e){
 window.addEventListener('scroll',ocultar,{passive:true});
 })();"""
 
+try:                         # mapa de los sistemas (mapa_sistemas.py): opcional; si el módulo falla, el reporte sale sin él
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import mapa_sistemas as MAPA
+except Exception as _e_mapa:
+    MAPA = None
+    print(f"aviso: el mapa de sistemas no está disponible ({_e_mapa})", file=sys.stderr)
+
 MICRO_CORTE_MAX = 60    # s: un hueco de tensión a mitad del corte (tipo "durante": ni al caer ni al volver la red) de hasta esta duración (1 min incluido) es un "micro corte" y su franja roja lleva una etiqueta oculta (cursor o toque) con los segundos que duró; el medidor da la hora en segundos enteros, así que 59 s y 60 s no se distinguen
 
 def es_micro_corte(h):
@@ -236,11 +244,64 @@ def _pill(nivel, txt):
     return f'<span class="pill {nivel}">{esc(txt)}</span>'
 
 
+def _estado_mapa(R, W1, solo_bat=False):
+    """Estado de un sistema para el mapa: ({"e": nivel, "y": nivel, "b": nivel}, texto del cursor, en_reserva). Niveles: c (rojo), s (naranja), w (ámbar), o (gris: sin dato) y g (verde).
+    Vista «Estado» (e): el más grave de sus incidentes, con el orden de «Puntos más relevantes»: c = sin red, inversor aislado o sin producción; s = falla o código de evento del inversor;
+    o = sin datos recientes del inversor o sin cierre diario; w = tuvo cortes de red en la ventana; g = normal. La batería en reserva (SOC de RESERVA o menos) va aparte, como un anillo: al corte de las 07:00
+    muchas baterías están bajas y, como color, taparían el resto. Vista «Rendimiento» (y): yield frente al patrón de la región (YIELD_ALERTA y G_GRAVE). Vista «Batería» (b): SOC al corte."""
+    s = R["sys"]
+    soc, fl, ratio = R.get("soc_ult"), R.get("flag"), R.get("ratio")
+    inc = []
+    if R.get("en_curso"):
+        inc.append(("c", "Sin red", "sin red al corte del reporte"))
+    if R.get("aislado"):
+        inc.append(("c", "Inversor aislado", "sin entrada de red (menos de 5 V) mientras el medidor de red marca tensión"))
+    if fl and fl[1] == "sin producción":
+        inc.append(("c", "Sin producción", "el contador no sumó generación en la ventana"))
+    fallas = sorted({v for _, v in (R.get("est") or []) if v in ("fault", "alarm")})
+    cods = sorted({v for _, v in (R.get("codigos") or [])})
+    if fallas or cods:
+        det = "; ".join(x for x in ((("estado " + ", ".join(fallas)) if fallas else ""), (("código " + ", ".join(cods)) if cods else "")) if x)
+        inc.append(("s", "Falla del inversor" if fallas else "Código de evento del inversor", det))
+    ui = (R.get("ult") or {}).get("inv")
+    if ui is None or W1 - ui > 2 * 3600000:
+        inc.append(("o", "Sin datos del inversor", "último dato " + (hbd(ui) if ui else "sin registro")))
+    if fl and fl[0] == "off":
+        inc.append(("o", "Sin cierre diario del medidor", fl[1]))
+    nc = len(R.get("cortes") or [])
+    if nc and not R.get("en_curso"):
+        inc.append(("w", "Cortes de red en la ventana", f"{nc} {'corte' if nc == 1 else 'cortes'}"))
+    orden = {"c": 0, "s": 1, "o": 2, "w": 3}
+    inc.sort(key=lambda c: orden[c[0]])
+    ne = inc[0][0] if inc else "g"
+    reserva = bool(soc and soc[1] <= RESERVA)
+    if solo_bat or (ratio is None and not (fl and fl[1] == "sin producción")):
+        ny = "o"
+    elif fl and fl[1] == "sin producción":
+        ny = "c"
+    else:
+        ny = "g" if ratio >= YIELD_ALERTA else ("w" if ratio >= G_GRAVE else "s")
+    nb = "o" if not soc else ("s" if soc[1] <= RESERVA else ("w" if soc[1] <= 50 else "g"))
+    zona_txt = (MAPA.titulo if MAPA else str.title)(s.get("zona_gw") or s["zona"] or "")
+    tip = f"{s['casa']} · {zona_txt} ({s['ciudad'].title()})" if zona_txt else f"{s['casa']} ({s['ciudad'].title()})"
+    tip += " · solo baterías" if solo_bat else ""
+    tip += "\nEstado: " + ("; ".join(f"{e}" + (f" ({d})" if d else "") for _, e, d in inc) if inc else "normal")
+    if reserva:
+        tip += "; batería en reserva"
+    if solo_bat:
+        tip += "\nRendimiento: sin FV"
+    elif ratio is not None:
+        tip += f"\nRendimiento: {100 * ratio:.0f} % del patrón" + (f" ({fl[1]})" if fl and fl[0] == "warn" else "")
+    else:
+        tip += "\nRendimiento: " + (fl[1] if fl else "sin dato")
+    tip += "\nBatería: " + (f"{soc[1]:.0f} %" + (f" ({hbd(soc[0])})" if W1 - soc[0] > 30 * 60000 else "") if soc else "sin dato")
+    return {"e": ne, "y": ny, "b": nb}, tip, reserva
+
 def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # RB: casas que solo tienen baterías (sin FV). Entran en la tabla propia, en baterías en reserva y en los
     # eventos del inversor, pero no en generación, yield, cobertura, exportación ni en los totales de cortes.
     RB = sorted(RB, key=lambda R: (ordenar_ciudad(R["sys"]["ciudad"]), num_casa(R["sys"]["casa"])))
-    css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS
+    css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS + (MAPA.CSS if MAPA else "")
     n_sys = len(RS)
     ciudades = sorted({R["sys"]["ciudad"] for R in RS}, key=ordenar_ciudad)
     ndias = len(dias)
@@ -729,6 +790,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # ------------------------------------------------ panel gráfico: semáforo, línea de tiempo, baterías y yield
     sec_vis = ""
+    mapa_blq = ""
     if VISUAL:
         _niv = {"Respaldo total": "g", "Respaldo total con transferencia": "g", "Retardo de transferencia": "w", "Caída durante el respaldo": "c", "Sin respaldo": "c"}
         _ico = {"g": "✓", "w": "▲", "c": "✕"}
@@ -1169,12 +1231,32 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 grafico_ev = (f'<div class="scroll"><svg viewBox="0 0 {EX0 + EPW + ETX + 360} {h_ev}" role="img" aria-label="Eventos de red del día por ciudad y hora" style="min-width:860px">{"".join(se)}</svg></div>'
                               '<div class="legend"><span><i class="lg g"></i>✓ peor casa con 99 % de respaldo o más</span><span><i class="lg w"></i>▲ peor casa entre 90 y 99 %</span><span><i class="lg c"></i>✕ peor casa con menos de 90 %</span>'
                               '<span>cada barra es un evento (varias casas de una ciudad sin red al mismo tiempo); su largo es el tiempo desde el primer corte hasta el último regreso de la red</span></div>')
+        if MAPA:
+            try:
+                _it = []
+                for _R, _bat in [(r_, False) for r_ in RS] + [(r_, True) for r_ in RB]:
+                    _s = _R["sys"]
+                    if _s.get("lat") is None:
+                        continue
+                    _nv, _tp, _rs = _estado_mapa(_R, W1, _bat)
+                    _it.append(dict(casa=_s["casa"], ciudad=_s["ciudad"], zona=_s.get("zona_gw") or _s["zona"], lat=_s["lat"], lon=_s["lon"], n=_nv, tip=_tp, solo_bat=_bat, reserva=_rs))
+                _it.sort(key=lambda i_: (ordenar_ciudad(i_["ciudad"]), num_casa(i_["casa"])))
+                _ley_mapa = {"e": [("c", "Sin red, inversor aislado o sin producción"), ("s", "Falla o código de evento del inversor"), ("o", "Sin datos recientes"), ("w", "Tuvo cortes de red en la ventana"), ("g", "Normal")],
+                             "y": [("g", f"{100 * YIELD_ALERTA:.0f} % del patrón o más"), ("w", f"entre {100 * G_GRAVE:.0f} y {100 * YIELD_ALERTA:.0f} %"), ("s", f"menos de {100 * G_GRAVE:.0f} %"), ("c", "sin producción"), ("o", "sin dato o sin FV")],
+                             "b": [("s", f"reserva ({RESERVA:.0f} % o menos)"), ("w", f"{RESERVA:.0f} a 50 %"), ("g", "más de 50 %"), ("o", "sin dato")]}
+                if _it:
+                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, f"batería en reserva ({RESERVA:.0f} % o menos)")
+                                + '<p class="note">Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» colorea el incidente más grave al corte del reporte, con el orden de «Puntos más relevantes», y marca con un anillo la batería en reserva; «Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. '
+                                  'Al pasar el cursor o tocar un punto sale el estado y su detalle. Es un mapa esquemático, sin mapa base y con el norte arriba: cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad.</p>')
+            except Exception as _e:
+                print(f"aviso: no se pudo armar el mapa de sistemas ({_e})", file=sys.stderr)
         sec_vis = f'''<section>
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
     {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
     <h3>Por ciudad</h3>
     <div class="sema">{tarj_c}</div>
+    {mapa_blq}
     {('<h3>Cortes de red en la ventana, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
     {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
     {('<h3>Cuánto vio la casa en cada corte</h3>' + grafico_h) if _cs else ''}
@@ -1205,6 +1287,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     lim_bat = (" Las casas que solo tienen baterías instaladas (" + ", ".join(R["sys"]["casa"] for R in RB) + ") se muestran en su propia tabla y no cuentan en generación, yield, cobertura ni exportación.") if RB else ""
     estado_cls ="warn" if en_curso else ("ok" if True else "")
     estado_txt = (f"{len(en_curso)} sistemas sin red al corte del reporte" if en_curso else ("Sin cortes de red en curso" if True else ""))
+    js_mapa = ('<script>' + MAPA.JS + '</script>') if (MAPA and mapa_blq) else ''
     gen = fecha_bog(int(time.time() * 1000))
     pagina = f'''<title>{esc(titulo)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -1275,7 +1358,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
-<script>{TOUCH_JS}</script>
+<script>{TOUCH_JS}</script>{js_mapa}
 </div>
 '''
     if getattr(args, "solo_interrupciones", False):
@@ -1297,6 +1380,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
     <h3>Por ciudad</h3>
     <div class="sema">{tarj_c_int}</div>
+    {mapa_blq}
     {('<h3>Eventos de red del día</h3>' + grafico_ev) if grafico_ev else ''}
     {('<h3>Cortes de red de hoy, por casa</h3>' + linea_t + leyenda_t + '<p class="note">Cada barra es un corte: su largo es el tiempo total sin red, en verde lo que la casa estuvo respaldada y en rojo los tramos en que el cliente vio la interrupción (huecos de tensión del medidor solar). Pasa el cursor para ver la duración, el tiempo que vio la casa, su % de respaldo y el veredicto. Los cortes y huecos de segundos se dibujan con un ancho mínimo para que se vean.</p>') if _cs else ''}
     {('<h3>Respaldo de cada casa en los eventos de red</h3>' + grafico_hm) if grafico_hm else ''}
@@ -1489,7 +1573,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   </div>
 </section>
 <footer>Cálculo propio sobre telemetría cruda de Metrum. Datos consultados en {time.time() - t_cons:.0f} s.</footer>
-<script>{TOUCH_JS}</script>
+<script>{TOUCH_JS}</script>{js_mapa}
 </div>
 '''
     with open(args.salida, "w", encoding="utf8") as f:

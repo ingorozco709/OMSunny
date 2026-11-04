@@ -997,3 +997,22 @@ Reportes Operativos Periódicos.
 - La rutina diaria se actualizó: la 101 es un sistema con FV normal de 3,57 kWp (49 sistemas).
 
 **Dónde está el dato:** `reporte-diario/potencia_instalada.json`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-11-04 — Coordenadas de los sistemas y mapa de su estado en el reporte (a pedido del usuario)
+
+**Aplica a:** Monitor de Salud de Flota, Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos.
+
+**Pregunta y pedido del usuario (4-nov):** «tú tienes acceso a las coordenadas de cada sistema a través de Metrum?» y, ya con la respuesta: «Quiero que las uses para armar el mapa de los sistemas con su estado en el reporte y también que las tengas en cuenta para el tema de la irradiancia».
+
+**Dónde están las coordenadas:** atributos `latDev` (latitud) y `lonDev` (longitud) del **gateway** de cada casa (dispositivo de tipo `pulsar`); el medidor de red, el medidor solar y el inversor no los traen. La casa se une con su gateway por el atributo `spcus` (el nombre de la casa). Verificado en solo lectura el 4-nov: 53 gateways con coordenadas válidas (los 49 sistemas del reporte, las Casas 6 y 205 y los dos pilotos), ninguna vacía ni en cero y todas distintas (son de cada casa, no del conjunto); 36 con 7 decimales, 10 con 6, 6 con 5 y 1 con 4 (unos 10 m). No se sabe si salieron del GPS del equipo o se digitaron en la instalación: sin confirmar que apunten al predio. **Son ubicaciones de viviendas de clientes**: no van en `resumen_diario.json` ni en tableros compartidos como números sin que el usuario lo pida (el mapa del reporte las dibuja como posición relativa dentro de cada conjunto, con rejilla y escala, sin mostrar latitud ni longitud).
+
+**Cómo se aplicó (mapa):**
+- `reporte_diario.py` lee `latDev` y `lonDev` con el resto de los atributos (`ATTR_KEYS`; `coordenadas()` descarta valores que no sean plausibles para Colombia) y las guarda en `s["lat"]` y `s["lon"]` junto con `s["zona_gw"]` (la zona del gateway).
+- Nuevo `reporte-diario/mapa_sistemas.py` y `_estado_mapa` en `reporte_html.py`: tarjeta «Mapa de los sistemas y su estado» dentro de la «Vista rápida» de los reportes diario y de interrupciones, después de «Por ciudad». Sin mapa base ni recursos externos (SVG en línea); si el módulo falla, el reporte sale sin mapa y avisa por stderr. Probado: sin el módulo el reporte se genera igual.
+- **Tres vistas** (botones): *Estado* (incidente más grave: rojo = sin red, inversor aislado o sin producción; naranja = falla o código de evento del inversor; gris = sin datos del inversor en 2 h o sin cierre diario; ámbar = tuvo cortes de red en la ventana; verde = normal), *Rendimiento* (yield frente al patrón: `YIELD_ALERTA` y `G_GRAVE`) y *Batería* (SOC al corte). **La batería en reserva (SOC de 20 % o menos) va como anillo naranja, no como color**: con el corte de las 07:00 más de la mitad de las baterías (25 de 49 el 4-nov) está en reserva y, como color, tapaba todo lo demás. Decisión de diseño mía, por confirmar con el usuario.
+- Un recuadro por conjunto de 3 o más casas, a escala de casa (los conjuntos miden unos 300 m y sus casas quedan a 10-60 m), y un recuadro por ciudad para los conjuntos de 1 o 2 casas.
+- **Dato de Metrum que conviene corregir:** la Casa 73 tiene dispositivos con zona `LLANOS DE PANCE` y otros con `RESERVAS DE PANCE`; su gateway y su ubicación (a unos 3 km de Reservas de Pance) dicen `LLANOS DE PANCE`. El mapa usa la zona del gateway; el resto del reporte sigue agrupándola por la zona de sus medidores (Reservas de Pance). Los 22 «pares» del análisis de la Casa 104 incluían a la Casa 73 como si fuera de Reservas de Pance.
+
+**Efecto con los datos del 4-nov (ventana 3-nov 07:00 a 4-nov 07:00):** el resumen (`resumen_diario.json`) no cambia; la página crece de unos 193 KB a unos 231 KB. Estado: 32 sistemas verdes, 12 con cortes en la ventana (los 15 cortes del evento de Turbaco, menos los que además tienen otro incidente), 4 con falla o código de evento del inversor y 1 sin datos; 25 con anillo de batería en reserva.
+
+**Dónde está el código:** `reporte-diario/mapa_sistemas.py` y `_estado_mapa` en `reporte-diario/reporte_html.py` (sección «Mapa de los sistemas» del README).
