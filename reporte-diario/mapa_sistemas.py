@@ -1,8 +1,8 @@
 """Mapa esquemático de los sistemas con su estado (SVG en línea, sin teselas ni recursos externos).
 
 Cada sistema es un punto en la posición de su gateway (atributos `latDev` y `lonDev` de Metrum). El color depende de la vista que se elija arriba del mapa
-(botones, con un script mínimo; sin él queda la vista «Estado»): «Estado» (incidentes: sin red, inversor aislado, falla, sin datos, cortes en la ventana, con un anillo
-para la batería en reserva), «Rendimiento» (yield frente al patrón de su región) y «Batería» (SOC al corte del reporte).
+(botones, con un script mínimo; sin él queda la vista «Estado»): «Estado» (un solo estado por sistema al momento del reporte: operativo, off-grid, desconectado o falla; el reporte ya no marca
+con un anillo la batería en reserva, aunque el módulo todavía lo dibuja si un punto trae `reserva`), «Rendimiento» (yield frente al patrón de su región) y «Batería» (SOC al corte del reporte).
 Los conjuntos residenciales miden unos 300 m y sus casas quedan a 10-60 m entre sí; por eso cada conjunto de 3 o más casas tiene su propio recuadro, a escala de casa, y los
 conjuntos de 1 o 2 casas de una ciudad se agrupan en un recuadro «otros conjuntos» a escala de ciudad. Sin mapa base: el norte va arriba, hay rejilla y barra de escala.
 El texto de cada punto sale con el cursor o al tocarlo (`<title>`, el mismo mecanismo de las demás gráficas del reporte).

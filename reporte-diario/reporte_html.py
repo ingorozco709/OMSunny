@@ -244,36 +244,36 @@ def _pill(nivel, txt):
     return f'<span class="pill {nivel}">{esc(txt)}</span>'
 
 
+MODO_ES = {"normal": "operando", "throttled": "operando", "standby": "en espera", "activating": "activando", "shutting_down": "apagándose", "fault": "falla", "alarm": "alarma"}   # invrun -> texto
+CODIGO_ACTIVO_MS = 15 * 60000    # un código de evento del inversor en los 15 min anteriores al corte cuenta como una falla en curso
+
+
 def _estado_mapa(R, W1, solo_bat=False):
-    """Estado de un sistema para el mapa: ({"e": nivel, "y": nivel, "b": nivel}, texto del cursor, en_reserva). Niveles: c (rojo), s (naranja), w (ámbar), o (gris: sin dato) y g (verde).
-    Vista «Estado» (e): el más grave de sus incidentes, con el orden de «Puntos más relevantes»: c = sin red, inversor aislado o sin producción; s = falla o código de evento del inversor;
-    o = sin datos recientes del inversor o sin cierre diario; w = tuvo cortes de red en la ventana; g = normal. La batería en reserva (SOC de RESERVA o menos) va aparte, como un anillo: al corte de las 07:00
-    muchas baterías están bajas y, como color, taparían el resto. Vista «Rendimiento» (y): yield frente al patrón de la región (YIELD_ALERTA y G_GRAVE). Vista «Batería» (b): SOC al corte."""
+    """Niveles de un sistema para el mapa ({"e": nivel, "y": nivel, "b": nivel}) y el texto del cursor. Niveles: c (rojo), s (naranja), w (ámbar), o (gris) y g (verde).
+    Vista «Estado» (e), decisión del usuario del 4-nov: un solo estado por sistema, al momento del reporte y sin combinar: g = operativo; s = off-grid (el inversor sin entrada de red: corte de red en curso o
+    inversor aislado); o = desconectado (el inversor sin datos hace más de 2 h al corte, o el gateway offline); c = falla (el inversor en modo falla o alarma, o con un código de evento en los 15 min anteriores
+    al corte). Si coinciden varias condiciones manda la primera de: desconectado (no se sabe más), falla y off-grid. Los cortes de red de la ventana, la batería en reserva y la falta de producción no son estados
+    de esta vista: están en «Puntos más relevantes», en «Batería» y en «Rendimiento». Vista «Rendimiento» (y): yield frente al patrón de la región (YIELD_ALERTA y G_GRAVE). Vista «Batería» (b): SOC al corte."""
     s = R["sys"]
     soc, fl, ratio = R.get("soc_ult"), R.get("flag"), R.get("ratio")
-    inc = []
-    if R.get("en_curso"):
-        inc.append(("c", "Sin red", "sin red al corte del reporte"))
-    if R.get("aislado"):
-        inc.append(("c", "Inversor aislado", "sin entrada de red (menos de 5 V) mientras el medidor de red marca tensión"))
-    if fl and fl[1] == "sin producción":
-        inc.append(("c", "Sin producción", "el contador no sumó generación en la ventana"))
-    fallas = sorted({v for _, v in (R.get("est") or []) if v in ("fault", "alarm")})
-    cods = sorted({v for _, v in (R.get("codigos") or [])})
-    if fallas or cods:
-        det = "; ".join(x for x in ((("estado " + ", ".join(fallas)) if fallas else ""), (("código " + ", ".join(cods)) if cods else "")) if x)
-        inc.append(("s", "Falla del inversor" if fallas else "Código de evento del inversor", det))
-    ui = (R.get("ult") or {}).get("inv")
-    if ui is None or W1 - ui > 2 * 3600000:
-        inc.append(("o", "Sin datos del inversor", "último dato " + (hbd(ui) if ui else "sin registro")))
-    if fl and fl[0] == "off":
-        inc.append(("o", "Sin cierre diario del medidor", fl[1]))
-    nc = len(R.get("cortes") or [])
-    if nc and not R.get("en_curso"):
-        inc.append(("w", "Cortes de red en la ventana", f"{nc} {'corte' if nc == 1 else 'cortes'}"))
-    orden = {"c": 0, "s": 1, "o": 2, "w": 3}
-    inc.sort(key=lambda c: orden[c[0]])
-    ne = inc[0][0] if inc else "g"
+    ui, gw, ru = (R.get("ult") or {}).get("inv"), R.get("gw"), R.get("run_ult")
+    modo = ru[1] if ru else None
+    cods = sorted({v for t, v in (R.get("codigos") or []) if W1 - t <= CODIGO_ACTIVO_MS})
+    gw_off = bool(gw and gw[1] == "offline" and (ui is None or gw[0] >= ui))      # el gateway quedó offline después del último dato del inversor
+    if ui is None or W1 - ui > 2 * 3600000 or gw_off:
+        ne = "o"
+        est = "desconectado (" + (f"gateway offline desde {hbd(gw[0])}" if gw_off else (f"último dato del inversor {hbd(ui)}" if ui else "sin registro del inversor")) + ")"
+    elif modo in ("fault", "alarm") or cods:
+        ne = "c"
+        det = "; ".join(x for x in ((f"inversor en modo {MODO_ES[modo]} ({hbd(ru[0])})" if modo in ("fault", "alarm") else ""), (("código de evento " + ", ".join(cods)) if cods else "")) if x)
+        est = f"falla ({det})"
+    elif R.get("en_curso") or R.get("aislado"):
+        ne = "s"
+        est = "off-grid (" + (("corte de red en curso: el inversor no tiene entrada de red" + ("; la batería respalda la casa" if R.get("bess") else "")) if R.get("en_curso")
+                              else "inversor aislado: sin entrada de red (menos de 5 V) mientras el medidor de red marca tensión; hay que revisar el inversor o su breaker de entrada") + ")"
+    else:
+        ne = "g"
+        est = "operativo" + (f" (inversor {MODO_ES.get(modo, modo)})" if modo and MODO_ES.get(modo, modo) != "operando" else "")
     reserva = bool(soc and soc[1] <= RESERVA)
     if solo_bat or (ratio is None and not (fl and fl[1] == "sin producción")):
         ny = "o"
@@ -285,17 +285,16 @@ def _estado_mapa(R, W1, solo_bat=False):
     zona_txt = (MAPA.titulo if MAPA else str.title)(s.get("zona_gw") or s["zona"] or "")
     tip = f"{s['casa']} · {zona_txt} ({s['ciudad'].title()})" if zona_txt else f"{s['casa']} ({s['ciudad'].title()})"
     tip += " · solo baterías" if solo_bat else ""
-    tip += "\nEstado: " + ("; ".join(f"{e}" + (f" ({d})" if d else "") for _, e, d in inc) if inc else "normal")
-    if reserva:
-        tip += "; batería en reserva"
+    tip += "\nEstado: " + est
     if solo_bat:
         tip += "\nRendimiento: sin FV"
     elif ratio is not None:
         tip += f"\nRendimiento: {100 * ratio:.0f} % del patrón" + (f" ({fl[1]})" if fl and fl[0] == "warn" else "")
     else:
         tip += "\nRendimiento: " + (fl[1] if fl else "sin dato")
-    tip += "\nBatería: " + (f"{soc[1]:.0f} %" + (f" ({hbd(soc[0])})" if W1 - soc[0] > 30 * 60000 else "") if soc else "sin dato")
-    return {"e": ne, "y": ny, "b": nb}, tip, reserva
+    tip += "\nBatería: " + (f"{soc[1]:.0f} %" + (" · en reserva" if reserva else "") + (f" ({hbd(soc[0])})" if W1 - soc[0] > 30 * 60000 else "") if soc else "sin dato")
+    return {"e": ne, "y": ny, "b": nb}, tip
+
 
 def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # RB: casas que solo tienen baterías (sin FV). Entran en la tabla propia, en baterías en reserva y en los
@@ -1238,16 +1237,16 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     _s = _R["sys"]
                     if _s.get("lat") is None:
                         continue
-                    _nv, _tp, _rs = _estado_mapa(_R, W1, _bat)
-                    _it.append(dict(casa=_s["casa"], ciudad=_s["ciudad"], zona=_s.get("zona_gw") or _s["zona"], lat=_s["lat"], lon=_s["lon"], n=_nv, tip=_tp, solo_bat=_bat, reserva=_rs))
+                    _nv, _tp = _estado_mapa(_R, W1, _bat)
+                    _it.append(dict(casa=_s["casa"], ciudad=_s["ciudad"], zona=_s.get("zona_gw") or _s["zona"], lat=_s["lat"], lon=_s["lon"], n=_nv, tip=_tp, solo_bat=_bat))
                 _it.sort(key=lambda i_: (ordenar_ciudad(i_["ciudad"]), num_casa(i_["casa"])))
-                _ley_mapa = {"e": [("c", "Sin red, inversor aislado o sin producción"), ("s", "Falla o código de evento del inversor"), ("o", "Sin datos recientes"), ("w", "Tuvo cortes de red en la ventana"), ("g", "Normal")],
+                _ley_mapa = {"e": [("g", "Operativo"), ("s", "Off-grid: el inversor sin entrada de red"), ("o", "Desconectado: sin datos del inversor hace más de 2 h"), ("c", "Falla del inversor")],
                              "y": [("g", f"{100 * YIELD_ALERTA:.0f} % del patrón o más"), ("w", f"entre {100 * G_GRAVE:.0f} y {100 * YIELD_ALERTA:.0f} %"), ("s", f"menos de {100 * G_GRAVE:.0f} %"), ("c", "sin producción"), ("o", "sin dato o sin FV")],
                              "b": [("s", f"reserva ({RESERVA:.0f} % o menos)"), ("w", f"{RESERVA:.0f} a 50 %"), ("g", "más de 50 %"), ("o", "sin dato")]}
                 _bases_mapa = MAPA.cargar_bases(os.path.join(HERE, "mapas_base"))
                 if _it:
-                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, f"batería en reserva ({RESERVA:.0f} % o menos)", _bases_mapa)
-                                + '<p class="note">Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» colorea el incidente más grave al corte del reporte, con el orden de «Puntos más relevantes», y marca con un anillo la batería en reserva; «Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. '
+                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, "batería en reserva", _bases_mapa)
+                                + '<p class="note">Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» da un solo color por sistema al momento del reporte, sin combinar estados (verde, operativo; naranja, off-grid; gris, desconectado; rojo, falla del inversor); los cortes de la ventana están en «Puntos más relevantes» y la batería en reserva, en «Batería». «Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. '
                                   'Al pasar el cursor o tocar un punto sale el estado y su detalle. El norte va arriba; cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad. Mapa base dibujado con datos de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL), guardados en <code>mapas_base/</code>; donde casi no hay nada mapeado se dibuja una rejilla.</p>')
             except Exception as _e:
                 print(f"aviso: no se pudo armar el mapa de sistemas ({_e})", file=sys.stderr)
