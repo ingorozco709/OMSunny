@@ -1035,3 +1035,24 @@ Reportes Operativos Periódicos.
 - Open-Meteo (API de radiación satelital, malla de ~5 km) ubica los 49 sistemas en solo 4 celdas, una por ciudad: con esa fuente las coordenadas de cada casa no aportan nada frente a un punto por ciudad. Para distinguir casas dentro de una ciudad hay que usar GOES (píxeles de ~2 km).
 
 **Dónde está el código:** `reporte-diario/irradiancia_goes.py` (sección «Irradiancia por sitio» del README).
+
+## 2026-11-04 — Mapa base de OpenStreetMap debajo de los puntos del mapa de sistemas (a pedido del usuario)
+
+**Aplica a:** Generador de Reportes Operativos Periódicos, Analista de Disponibilidad y Reportes, Monitor de Salud de Flota.
+
+**Pedido del usuario (4-nov):** «se ven muy feos esos puntos sin un mapa base» (sobre el mapa de sistemas de la entrada anterior).
+
+**Regla:** el mapa de sistemas del reporte lleva un mapa base: calles, edificios, piscinas, agua y zonas verdes de OpenStreetMap (© colaboradores de OpenStreetMap, licencia ODbL), dibujados como vectores en los colores del tema oscuro del reporte. **Se guardan en el repositorio y el reporte no pide nada a internet**: la rutina no necesita llegar a OpenStreetMap y el mapa sale igual sin conexión. La atribución «© colaboradores de OpenStreetMap» va en cada recuadro con mapa base y en la nota bajo el mapa; es parte de la licencia y no se quita.
+
+**Cómo se aplicó:**
+- `reporte-diario/mapas_base.py` baja de la API de OpenStreetMap (`/api/0.6/map.json`, una petición por recuadro, partida en cuatro si trae demasiados nodos; Overpass no respondió desde este entorno) lo que se ve en cada recuadro, lo clasifica en capas (calles principales, residenciales, de servicio y senderos; edificios, piscinas, agua y cauces, zonas verdes y uso residencial) y lo guarda en `reporte-diario/mapas_base/<recuadro>.json` como geometrías simplificadas (millonésimas de grado, cada punto respecto al anterior), unos 200 KB en total. Los archivos solo traen el entorno de cada recuadro, no las casas ni sus coordenadas.
+- `mapa_sistemas.py` los dibuja debajo de los puntos con el detalle que permite la escala (a escala de casa todo; a escala de ciudad solo calles, agua y verde, con menos puntos), con los rótulos sobre un contorno para que se lean encima del mapa. Un recuadro sin archivo, con el archivo dañado o con casi nada mapeado cae a la rejilla de antes sin afectar a los demás (probado con un JSON dañado, con `capas` mal formadas y sin carpeta `mapas_base/`). Los recuadros se reparten en dos columnas de alto parecido.
+- La página del reporte pasa de unos 231 KB a unos 334 KB.
+
+**Cobertura al 4-nov:** Reservas de Pance (edificios y calles), Terra by Kaia (edificios, piscina y zonas verdes) y los recuadros «otros conjuntos» de Cali y Barranquilla: bien. Prado Verde Primavera (Turbaco): solo calles, sin edificios. Cartagena (Casa 78T): nada mapeado, queda la rejilla. Se mejora mapeando en OpenStreetMap (es un proyecto abierto de terceros, no un cambio nuestro) y refrescando el archivo.
+
+**Mantenimiento:** reconstruir con `python3 reporte-diario/mapas_base.py [--solo <clave>]` solo cuando cambie la lista de recuadros (una casa en un conjunto nuevo, un conjunto que pasa de 2 a 3 casas) o se quiera refrescar el mapa; son pocas peticiones, con pausas, como pide la política de uso de OpenStreetMap. No correrlo dentro del reporte diario ni en un bucle. Cada archivo guarda el área que cubre (`bbox`); si entra una casa que agranda un recuadro más allá de esa área, el generador avisa por la salida de errores («el mapa base de … no cubre todo el recuadro») y hay que reconstruirlo.
+
+**Privacidad:** el mapa base más los puntos muestran la ubicación relativa de las casas dentro de cada conjunto (sin latitud ni longitud escritas y sin direcciones); los archivos de `mapas_base/` traen solo el área de cada recuadro y datos públicos de OpenStreetMap, no las casas. Quien vea el reporte ve esa ubicación relativa: antes de compartirlo más allá del equipo conviene decidir si se dejan los números de casa en el mapa.
+
+**Dónde está el código:** `reporte-diario/mapa_sistemas.py` (`_capa_base`, `cargar_bases`), `reporte-diario/mapas_base.py` y `reporte-diario/mapas_base/` (sección «Mapa de los sistemas» del README).

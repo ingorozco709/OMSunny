@@ -1244,10 +1244,11 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 _ley_mapa = {"e": [("c", "Sin red, inversor aislado o sin producción"), ("s", "Falla o código de evento del inversor"), ("o", "Sin datos recientes"), ("w", "Tuvo cortes de red en la ventana"), ("g", "Normal")],
                              "y": [("g", f"{100 * YIELD_ALERTA:.0f} % del patrón o más"), ("w", f"entre {100 * G_GRAVE:.0f} y {100 * YIELD_ALERTA:.0f} %"), ("s", f"menos de {100 * G_GRAVE:.0f} %"), ("c", "sin producción"), ("o", "sin dato o sin FV")],
                              "b": [("s", f"reserva ({RESERVA:.0f} % o menos)"), ("w", f"{RESERVA:.0f} a 50 %"), ("g", "más de 50 %"), ("o", "sin dato")]}
+                _bases_mapa = MAPA.cargar_bases(os.path.join(HERE, "mapas_base"))
                 if _it:
-                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, f"batería en reserva ({RESERVA:.0f} % o menos)")
+                    mapa_blq = (f'<h3>Mapa de los sistemas y su estado <span class="h3s">al corte del reporte, {hbd(W1)}</span></h3>' + MAPA.bloque_mapa(_it, _ley_mapa, f"batería en reserva ({RESERVA:.0f} % o menos)", _bases_mapa)
                                 + '<p class="note">Cada punto es un sistema, en la posición de su gateway (coordenadas de Metrum); «Estado» colorea el incidente más grave al corte del reporte, con el orden de «Puntos más relevantes», y marca con un anillo la batería en reserva; «Rendimiento» usa el yield frente al patrón de su región y «Batería», el SOC al corte. '
-                                  'Al pasar el cursor o tocar un punto sale el estado y su detalle. Es un mapa esquemático, sin mapa base y con el norte arriba: cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad.</p>')
+                                  'Al pasar el cursor o tocar un punto sale el estado y su detalle. El norte va arriba; cada conjunto de 3 o más casas tiene su recuadro a escala de casa y los demás se agrupan por ciudad. Mapa base dibujado con datos de OpenStreetMap (© colaboradores de OpenStreetMap, ODbL), guardados en <code>mapas_base/</code>; donde casi no hay nada mapeado se dibuja una rejilla.</p>')
             except Exception as _e:
                 print(f"aviso: no se pudo armar el mapa de sistemas ({_e})", file=sys.stderr)
         sec_vis = f'''<section>
