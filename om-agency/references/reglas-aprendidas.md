@@ -1092,3 +1092,15 @@ Reportes Operativos Periódicos.
 **Efecto con los datos del 4-nov (corte de las 07:00):** 48 sistemas operativos y 1 desconectado (Casa 382p, sin registro del inversor); ninguno off-grid ni con falla. Con la definición anterior eran 32 normales, 12 con cortes en la ventana, 4 con falla o código (23p, 102p y 435p con falla de la noche anterior y la Casa 24 con códigos `igf` de 8 h antes, todas ya operando) y 1 sin datos.
 
 **Dónde está el código:** `_estado_mapa` y la leyenda en `reporte-diario/reporte_html.py` (sección «Mapa de los sistemas» del README). Reemplaza la definición de «Estado» de la entrada «Coordenadas de los sistemas y mapa de su estado en el reporte».
+
+## 2026-11-04 — El mapa único con zoom queda fijo en el reporte diario (decisión del usuario)
+
+**Aplica a:** Generador de Reportes Operativos Periódicos, Analista de Disponibilidad y Reportes, Monitor de Salud de Flota.
+
+**Pedido del usuario (4-nov):** «actualiza el reporte diario con los datos actuales incluyendo el mapa para ver como se ve» y, después de verlo (versión 107 del reporte diario, con los datos de las 16:56), «Dejalo Fijo».
+
+**Regla:** el reporte diario y el de interrupciones llevan el mapa único con zoom (entrada «Un solo mapa con zoom para todos los sistemas») con la vista «Estado» de cuatro estados al momento del reporte (entrada «Vista «Estado» del mapa»). Los recuadros por conjunto solo salen si `mapa_zoom.py` falla; en ese caso el generador deja una línea «aviso:» en su salida de errores. Quedó en la rama de la rutina (`claude/loving-hawking-iwftvn`), así que el reporte de las 7:00 del 5-nov ya lo trae.
+
+**Privacidad:** el usuario sabe que el reporte diario está compartido como «cualquiera con el enlace» y que el mapa lleva las coordenadas de las casas dentro de la página; lo dejó así (el menú Compartir del artefacto permite restringirlo). Las coordenadas van solo dentro del HTML del reporte: no se copian al resumen de la rutina ni a ningún otro archivo.
+
+**Mantenimiento:** una casa nueva que cae fuera de lo ya bajado se ve sin mapa base hasta reconstruirlo con `reporte-diario/mapas_base.py --zoom` (y `mapas_base.py` para los recuadros); el generador avisa cuando el mapa base de un recuadro no cubre todo.
