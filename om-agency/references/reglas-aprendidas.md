@@ -1074,3 +1074,21 @@ Reportes Operativos Periódicos.
 **Privacidad:** los datos del mapa llevan las **coordenadas de las casas** dentro del código de la página (los recuadros solo dibujaban posiciones relativas). El reporte diario se comparte con «cualquiera con el enlace»: conviene decidir con el usuario si se deja así, se restringe quién lo ve o se redondean las coordenadas.
 
 **Dónde está el código:** `reporte-diario/mapa_zoom.py`, `reporte-diario/mapa_zoom.js`, `reporte-diario/mapas_base.py` y `reporte_html.py` (sección «Mapa de los sistemas» del README).
+## 2026-11-04 — Vista «Estado» del mapa: cuatro estados excluyentes al momento del reporte (a pedido del usuario)
+
+**Aplica a:** Generador de Reportes Operativos Periódicos, Analista de Disponibilidad y Reportes, Monitor de Salud de Flota.
+
+**Pedido del usuario (4-nov):** «en el estado solo quiero que me marques en verdes si están operativos en el momento de reporte, naranja si están offgrid y gris si están desconectados o rojos si tienen una falla, sin combinar los estados».
+
+**Regla:** en la vista «Estado» del mapa de sistemas cada sistema tiene **un solo estado, al momento del reporte (el corte)**, y no se combinan:
+- **Verde, operativo:** ninguna de las condiciones de abajo.
+- **Naranja, off-grid:** el inversor sin entrada de red al corte (menos de 5 V): corte de red en curso (`en_curso`, con la casa respaldada o no) o inversor aislado (`aislado`: sin entrada de red mientras el medidor de red marca tensión).
+- **Gris, desconectado:** el inversor sin datos hace más de 2 h al corte o sin registro (la misma regla de «Comunicación») o el gateway offline después del último dato del inversor.
+- **Rojo, falla:** el inversor en modo falla o alarma (último `invrun`, `fault` o `alarm`) o con un código de evento del inversor en los 15 min anteriores al corte.
+- **Prioridad si coinciden varias:** gris (si no se ve el sistema no se sabe más), luego rojo, luego naranja.
+
+**Lo que sale de esta vista:** «tuvo cortes de red en la ventana» (ámbar), «sin producción», «sin cierre diario del medidor», los códigos de evento y fallas de horas antes del corte (si el inversor ya opera, es verde) y el anillo de la batería en reserva. Los cortes siguen en «Puntos más relevantes» y en las tablas de interrupciones, la reserva en la vista «Batería» y la falta de producción en «Rendimiento». El texto de cada punto trae un solo estado con su detalle (hora del último dato, modo del inversor, código) y la batería con «en reserva».
+
+**Efecto con los datos del 4-nov (corte de las 07:00):** 48 sistemas operativos y 1 desconectado (Casa 382p, sin registro del inversor); ninguno off-grid ni con falla. Con la definición anterior eran 32 normales, 12 con cortes en la ventana, 4 con falla o código (23p, 102p y 435p con falla de la noche anterior y la Casa 24 con códigos `igf` de 8 h antes, todas ya operando) y 1 sin datos.
+
+**Dónde está el código:** `_estado_mapa` y la leyenda en `reporte-diario/reporte_html.py` (sección «Mapa de los sistemas» del README). Reemplaza la definición de «Estado» de la entrada «Coordenadas de los sistemas y mapa de su estado en el reporte».
