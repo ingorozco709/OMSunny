@@ -260,6 +260,9 @@ def construir_sistemas(devs, attrs):
             if s["lat"] is None:          # coordenadas de la casa: las del primer gateway que las tenga (se usan en el mapa y para la irradiancia por sitio)
                 s["lat"], s["lon"] = coordenadas(a)
                 s["zona_gw"] = a.get("zone") or None      # conjunto según el gateway (el de las coordenadas); en Metrum la Casa 73 tiene dispositivos en dos zonas y su gateway dice LLANOS DE PANCE
+    for s in SYS.values():
+        if s["zona_gw"]:                          # el conjunto de la casa es el de su gateway, el de sus coordenadas: el inversor de la Casa 73 dice RESERVAS DE PANCE en Metrum, pero sus medidores y su gateway
+            s["zona"] = s["zona_gw"]              # dicen LLANOS DE PANCE y el usuario confirmó el 5-nov que la casa es de Llanos de Pance
     return SYS
 
 def cargar_exclusiones():

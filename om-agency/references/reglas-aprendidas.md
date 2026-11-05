@@ -1118,3 +1118,19 @@ Reportes Operativos Periódicos.
 **Cómo se aplicó:** `exclusiones.json` → lista nueva `"paneles_conectados"` (`[{"casa", "fecha", "nota"}]`; hoy la Casa 104, 2026-11-05); `paneles_confirmados()` en `reporte_diario.py`; `reporte_html.py` quita esas casas del punto. Probado con los datos del 5-nov: con la lista, el reporte trae 6 puntos (sin ese) y el resto no cambia; sin la lista, vuelve a salir el punto con la Casa 104 (3,4 kWh). La casa sigue en el reporte para todo lo demás: su generación baja sigue saliendo en «Rendimiento» (baja vs patrón, producción limitada) y en las cifras del portafolio, y si algún día el contador no sumara generación, la alerta «sin producción» de «Rendimiento» la marcaría.
 
 **Dónde está el código:** `paneles_confirmados` en `reporte-diario/reporte_diario.py`, el punto en `reporte-diario/reporte_html.py` y la lista en `reporte-diario/exclusiones.json`.
+
+## 2026-11-05 — La Casa 73 es de Llanos de Pance (dato del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Dato del usuario (5-nov):** «la casa es de llanos de pance», sobre la Casa 73, que el reporte agrupaba en Reservas de Pance por la zona de uno de sus dispositivos.
+
+**Qué había (lectura de Metrum del 5-nov):** de los cuatro dispositivos de la Casa 73, solo el inversor (`HP315K2HWC290038`, Livoltek HP3-15KL2) trae `zone = RESERVAS DE PANCE`; sus dos medidores y su gateway traen `LLANOS DE PANCE`, y las coordenadas del gateway la ubican a unos 3 km de Reservas de Pance. El generador tomaba la zona del primer dispositivo que la tenía (el inversor) y solo el mapa usaba la del gateway. Es la única casa de los 53 sistemas cuya zona difiere entre sus dispositivos.
+
+**Regla:** la zona (conjunto) de cada casa es la de su gateway, en todo el reporte. Aplicado en `construir_sistemas` de `reporte-diario/reporte_diario.py`. El único sistema que cambia es la Casa 73; Reservas de Pance pasa de 23 a 22 casas en las tablas por zona («Estado actual de los sistemas» del reporte de interrupciones, probado con el corte del 24-oct 21:00: «Reservas de Pance · 22 sistemas» y «Llanos de Pance · 1 sistema»). El reporte diario no agrupa por zona: no cambia (el mapa ya la mostraba en Llanos de Pance).
+
+**Pendiente, tarea para una persona del equipo (el agente solo lee Metrum):** corregir en Metrum el atributo `zone` del inversor de la Casa 73 a `LLANOS DE PANCE`.
+
+**Efecto en análisis previos:** el análisis independiente de la Casa 104 comparó su yield con 22 casas «de Reservas de Pance» que incluían a la Casa 73; con la zona correcta son 21 pares. No se rehízo; queda por decidir si el usuario lo pide.
+
+**Dónde está el código:** `construir_sistemas` en `reporte-diario/reporte_diario.py` (sección «Mapa de los sistemas» del README).
