@@ -502,8 +502,8 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         P.append(("warn", "Comunicación", f"{len(sin_datos_inv)} sistemas sin datos del inversor en las últimas 2 h ({', '.join(R['sys']['casa'] for R in sin_datos_inv[:10])}{'…' if len(sin_datos_inv) > 10 else ''}); {len(stale)} dispositivos con último dato de más de 2 h."))
     else:
         P.append(("ok", "Comunicación", "Todos los inversores reportaron en las últimas 2 h."))
-    _mi = cargar_exclusiones()[1]
-    _bajos = sorted((R for R in RS if R["sys"]["casa"].strip().lower() in _mi and R["pv_tot"] is not None and R["pv_tot"] < 5), key=lambda R: num_casa(R["sys"]["casa"]))
+    _mi, _conf = cargar_exclusiones()[1], paneles_confirmados()          # _conf: casas cuyos paneles el usuario ya confirmó como conectados (no se vuelve a pedir)
+    _bajos = sorted((R for R in RS if R["sys"]["casa"].strip().lower() in _mi and R["sys"]["casa"].strip().lower() not in _conf and R["pv_tot"] is not None and R["pv_tot"] < 5), key=lambda R: num_casa(R["sys"]["casa"]))
     if _bajos:
         P.append(("warn", "Casas en operación plena", "Estas casas se incluyen como operando plenamente, pero el contador de su inversor marca muy poca generación en la ventana: " + "; ".join(f"{R['sys']['casa']} {dec(R['pv_tot'], 1)} kWh" for R in _bajos) + ". Reducen el yield y la cobertura del portafolio Sunny; conviene confirmar que sus paneles estén conectados al inversor."))
     orden = {"crit": 0, "warn": 1, "ok": 2}

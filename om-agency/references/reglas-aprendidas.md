@@ -1104,3 +1104,17 @@ Reportes Operativos Periódicos.
 **Privacidad:** el usuario sabe que el reporte diario está compartido como «cualquiera con el enlace» y que el mapa lleva las coordenadas de las casas dentro de la página; lo dejó así (el menú Compartir del artefacto permite restringirlo). Las coordenadas van solo dentro del HTML del reporte: no se copian al resumen de la rutina ni a ningún otro archivo.
 
 **Mantenimiento:** una casa nueva que cae fuera de lo ya bajado se ve sin mapa base hasta reconstruirlo con `reporte-diario/mapas_base.py --zoom` (y `mapas_base.py` para los recuadros); el generador avisa cuando el mapa base de un recuadro no cubre todo.
+
+## 2026-11-05 — Los paneles de la Casa 104 están conectados (dato del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Dato del usuario (5-nov):** «Los paneles de la 104 sí están conectados», respuesta a la nota del reporte del 5-nov: el punto «Casas en operación plena» decía que el contador del inversor de la Casa 104 marcaba 3,4 kWh y que convenía confirmar que sus paneles estuvieran conectados al inversor.
+
+**Contexto:** la Casa 104 (Livoltek HP3-10KL2, 4,165 kWp) tiene un consumo muy bajo (de 0,5 a 4 kWh/día) y no exporta: con la batería llena el inversor limita la producción FV al consumo de la casa, así que su generación diaria es baja por producción limitada y no por falta de conexión (análisis independiente de la Casa 104: yield bajo desde el 24-sep, asociado a consumo bajo y batería llena).
+
+**Regla:** el punto «Casas en operación plena» ya no menciona la Casa 104 ni pide confirmar la conexión de sus paneles. Las demás casas de `"incluir"` con menos de 5 kWh en la ventana (Casas 35, 57 y 447p) siguen con el punto, tal como estaba.
+
+**Cómo se aplicó:** `exclusiones.json` → lista nueva `"paneles_conectados"` (`[{"casa", "fecha", "nota"}]`; hoy la Casa 104, 2026-11-05); `paneles_confirmados()` en `reporte_diario.py`; `reporte_html.py` quita esas casas del punto. Probado con los datos del 5-nov: con la lista, el reporte trae 6 puntos (sin ese) y el resto no cambia; sin la lista, vuelve a salir el punto con la Casa 104 (3,4 kWh). La casa sigue en el reporte para todo lo demás: su generación baja sigue saliendo en «Rendimiento» (baja vs patrón, producción limitada) y en las cifras del portafolio, y si algún día el contador no sumara generación, la alerta «sin producción» de «Rendimiento» la marcaría.
+
+**Dónde está el código:** `paneles_confirmados` en `reporte-diario/reporte_diario.py`, el punto en `reporte-diario/reporte_html.py` y la lista en `reporte-diario/exclusiones.json`.

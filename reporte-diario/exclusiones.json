@@ -7,6 +7,13 @@
     "Casa 447p"
   ],
   "fuera": [],
+  "paneles_conectados": [
+    {
+      "casa": "Casa 104",
+      "fecha": "2026-11-05",
+      "nota": "El usuario confirmó que los paneles están conectados; su generación baja se explica por el consumo muy bajo de la casa y la batería llena (producción limitada), no por una desconexión"
+    }
+  ],
   "eventos_fuera": [
     {
       "casa": "Casa 9G",

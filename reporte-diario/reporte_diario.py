@@ -288,6 +288,16 @@ def cargar_exclusiones():
         ev.append((str(e.get("casa", "")).strip().lower(), ms(t0), ms(t1), str(e.get("motivo", "")).strip()))
     return norm("excluir"), norm("incluir"), norm("fuera"), ev
 
+def paneles_confirmados():
+    """Casas (en minúsculas) cuyos paneles el usuario confirmó que están conectados: `"paneles_conectados"` de exclusiones.json, [{"casa": "Casa 104", "fecha": "AAAA-MM-DD", "nota": "..."}].
+    El punto «Casas en operación plena» ya no pide confirmar la conexión de esas casas aunque su generación sea muy baja (p. ej. la Casa 104, con consumo muy bajo y la batería llena)."""
+    try:
+        with open(os.path.join(HERE, "exclusiones.json"), encoding="utf8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    return {str(e.get("casa", "") if isinstance(e, dict) else e).strip().lower() for e in d.get("paneles_conectados", [])} - {""}
+
 MOTIVO_FUERA = "fuera del reporte (no entregada a operaciones)"
 MOTIVO_NUEVA = "casa nueva en pruebas y estabilización (sin kWp registrado): fuera del reporte hasta que el usuario pida incluirla"
 
