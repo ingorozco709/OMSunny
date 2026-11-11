@@ -1134,3 +1134,22 @@ Reportes Operativos Periódicos.
 **Efecto en análisis previos:** el análisis independiente de la Casa 104 comparó su yield con 22 casas «de Reservas de Pance» que incluían a la Casa 73; con la zona correcta son 21 pares. No se rehízo; queda por decidir si el usuario lo pide.
 
 **Dónde está el código:** `construir_sistemas` en `reporte-diario/reporte_diario.py` (sección «Mapa de los sistemas» del README).
+
+## 2026-11-11 — Casa 205 entra al reporte (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «Por favor de ahora en adelante incluye la casa 205 de Terra en los reportes» (11-nov), el mismo día en que pidió incluirla en el tablero de baterías (artifact aparte).
+
+**Qué la originó:** la Casa 205 (Terra by Kaia, Barranquilla; Livoltek HP3-15KL2, con datos de batería desde el 27-oct) estaba fuera como casa nueva en pruebas y estabilización y sin kWp (entrada del 2026-10-20). El usuario pide ahora que entre al reporte, tal como esa entrada prevé («hasta que yo te lo pida»).
+
+**Cómo se aplicó:**
+- `exclusiones.json` → la Casa 205 pasa a `"incluir"`: sin su kWp en `potencia_instalada.json`, la regla de casa nueva (`MOTIVO_NUEVA`) la volvería a dejar fuera.
+- Sin kWp, la casa entra con cortes, respaldo, baterías, exportación, comunicación y generación por balance de medidores, pero sin yield ni % del patrón (no se inventa un kWp): en «Rendimiento» figura con «— kWp». El medidor de yield no la cuenta; la cobertura solar sí.
+- Sistemas esperados en el resumen JSON: 50 (antes 49); `solo_baterias` sigue vacío. Siguen fuera los pilotos y las casas nuevas sin kWp: hoy la Casa 6 y la Casa 300 (nueva en Terra by Kaia, apareció en Metrum el 10-nov). La rutina diaria se actualizó con esas cifras.
+- Pendiente: el kWp de la Casa 205. Cuando llegue, agregarlo a `potencia_instalada.json` (clave en minúsculas, `casa 205`) y quitarla de `"incluir"`; entonces tiene yield y alerta «baja vs patrón».
+- El tablero de baterías (artifact aparte) ya la incluye desde el 11-nov.
+
+**Efecto con los datos del 11-nov (ventana 10-nov 07:00 a 11-nov 07:00):** el reporte pasa de 49 a 50 sistemas y los excluidos quedan en los pilotos y las Casas 6 y 300. La Casa 205 generó 22,5 kWh el 10-nov, exportó 0,01 kWh, importó 2,1 kWh y su consumo fue de 24,6 kWh (cobertura solar de 91 %). El yield del portafolio casi no cambia (1131 → 1133) porque la Casa 205 no tiene kWp, y no hay cambios en los cortes (3 en 3 eventos).
+
+**Dónde está el código:** rama `nombre in manual_in` de `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
