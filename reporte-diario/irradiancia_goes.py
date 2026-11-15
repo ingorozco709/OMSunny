@@ -211,8 +211,7 @@ def sitios_del_reporte():
     devs = rd.listar_dispositivos()
     with cf.ThreadPoolExecutor(8) as ex:
         attrs = {dv["id"]["id"]: a for dv, a in ex.map(rd.atributos, devs)}
-    kwp = json.load(open(os.path.join(HERE, "potencia_instalada.json")))
-    return {s["casa"]: (s["lat"], s["lon"]) for s in rd.construir_sistemas(devs, attrs).values() if s["lat"] is not None and s["casa"].strip().lower() in kwp}
+    return {s["casa"]: (s["lat"], s["lon"]) for s in rd.construir_sistemas(devs, attrs).values() if s["lat"] is not None and rd.kwp_de(s) is not None}
 
 
 if __name__ == "__main__":

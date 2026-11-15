@@ -110,10 +110,9 @@ def items_del_reporte():
     devs = rd.listar_dispositivos()
     with cf.ThreadPoolExecutor(8) as ex:
         attrs = {dv["id"]["id"]: a for dv, a in ex.map(rd.atributos, devs)}
-    kwp = json.load(open(os.path.join(HERE, "potencia_instalada.json")))
     SYS = rd.construir_sistemas(devs, attrs)
     return sorted(({"casa": s["casa"], "ciudad": s["ciudad"], "zona": s.get("zona_gw") or s["zona"], "lat": s["lat"], "lon": s["lon"]}
-                   for s in SYS.values() if s["lat"] is not None and s["casa"].strip().lower() in kwp), key=lambda i: (rd.ordenar_ciudad(i["ciudad"]), rd.num_casa(i["casa"])))
+                   for s in SYS.values() if s["lat"] is not None and rd.kwp_de(s) is not None), key=lambda i: (rd.ordenar_ciudad(i["ciudad"]), rd.num_casa(i["casa"])))
 
 
 GEO = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/"

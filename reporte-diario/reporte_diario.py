@@ -205,6 +205,20 @@ try:
     KWP = json.load(open(os.path.join(HERE, "potencia_instalada.json"), encoding="utf8"))
 except (OSError, ValueError):
     KWP = {}
+
+def kwp_de(s):
+    """kWp (pico DC) de un sistema según el registro `potencia_instalada.json`, o None si la casa no está en el registro (casa nueva).
+    El registro se busca por nombre de casa. Si el mismo nombre existe en otra ciudad (hoy «Casa 63», en Cali y en Barranquilla), la clave del registro lleva la ciudad,
+    p. ej. "casa 63 (cali)": en ese caso se busca primero «nombre (ciudad)» y, si el nombre tiene claves con ciudad, el nombre solo ya no vale para las demás ciudades
+    (la casa nueva del mismo nombre en otra ciudad no hereda el kWp de la registrada ni se confunde con una casa en operación)."""
+    nombre = s["casa"].strip().lower()
+    con_ciudad = f"{nombre} ({s['ciudad'].strip().lower()})"
+    if con_ciudad in KWP:
+        return KWP[con_ciudad]
+    if any(k.startswith(nombre + " (") for k in KWP):
+        return None
+    return KWP.get(nombre)
+
 HMC = {}   # cierres diarios de los medidores (CenergyAI, CenergyAE) por dispositivo
 def bal_dia(s, d0, d1):
     """Balance de medidores del día: generación = demanda (CenergyAI del medidor solar) − importada + exportada (CenergyAI/AE del medidor de red). Devuelve (generación kWh, demanda kWh) o None."""
@@ -267,6 +281,7 @@ def construir_sistemas(devs, attrs):
 
 def cargar_exclusiones():
     """exclusiones.json (opcional): {"excluir": ["Casa X"], "incluir": ["Casa Y"], "fuera": ["Casa Z"], "eventos_fuera": [{"casa": "Casa X", "desde": "2026-10-13", "hasta": "2026-10-14", "motivo": "..."}]}.
+    Los nombres de excluir / incluir / fuera pueden llevar la ciudad entre paréntesis ("Casa 63 (Barranquilla)") cuando el mismo nombre existe en otra ciudad; sin ciudad valen para todas.
     - excluir / incluir: corrigen a mano la regla automática de "sin generación FV" (las excluidas pasan a la tabla de casas solo con baterías).
       "incluir" también deja entrar a una casa nueva que aún no tiene kWp en potencia_instalada.json (ver MOTIVO_NUEVA).
     - fuera: casas que no entran al reporte en ningún lugar (p. ej. nuevas en pruebas o aún no entregadas a operaciones), igual que los pilotos.
@@ -308,19 +323,21 @@ def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in, fuera=frozenset
     """Devuelve el motivo por el que un sistema no entra al reporte, o None si debe incluirse.
     - Pilotos (nombre con "Piloto").
     - Casas nuevas: las que energizan pero siguen en pruebas y estabilización no entran hasta que el usuario lo pida. Es nueva toda casa
-      que Metrum tiene y que no está en potencia_instalada.json (el registro de las casas en operación); "incluir" la deja entrar.
+      que Metrum tiene y que no está en potencia_instalada.json (el registro de las casas en operación; ver kwp_de: un nombre repetido en otra ciudad se
+      registra con la ciudad, así que la casa nueva del mismo nombre también sale como nueva); "incluir" la deja entrar.
     - Casas sin generación FV: solo tienen las baterías de respaldo instaladas, así que el inversor nunca supera PV_MIN_KWH al día.
     """
     nombre = s["casa"].strip().lower()
-    if nombre in fuera:
+    claves = {nombre, f"{nombre} ({s['ciudad'].strip().lower()})"}   # "Casa 63" (en cualquier ciudad) o "Casa 63 (Barranquilla)" (solo en esa)
+    if claves & fuera:
         return MOTIVO_FUERA
-    if nombre in manual_in:
+    if claves & manual_in:
         return None
-    if nombre in manual_ex:
+    if claves & manual_ex:
         return "lista manual"
     if "piloto" in nombre:
         return "piloto"
-    if KWP and nombre not in KWP:      # sin el registro cargado (KWP vacío) no se puede saber qué casa es nueva
+    if KWP and kwp_de(s) is None:      # sin el registro cargado (KWP vacío) no se puede saber qué casa es nueva
         return MOTIVO_NUEVA
     dias_dato = {}
     for d0 in range(d_ini, d_fin, 86400000):
@@ -479,7 +496,7 @@ def analizar(s, D, W0, W1, dias):
     s["marca"] = ((inv["attrs"].get("invbrand") or "") if inv else "").upper()
     s["modelo"] = ((inv["attrs"].get("invmodel") or "") if inv else "").strip()
     s["cap_inv"] = num(inv["attrs"].get("invcap")) if inv else None
-    s["cap"] = KWP.get(s["casa"].strip().lower())   # potencia pico instalada en DC (kWp), del archivo de sistemas
+    s["cap"] = kwp_de(s)   # potencia pico instalada en DC (kWp), del archivo de sistemas
     R = dict(sys=s, inv_name=inv["name"] if inv else None)
     # --- comunicación
     R["ult"] = dict(inv=t_inv if t_inv > 0 else None, red=t_red if t_red > 0 else None, solar=t_sol if t_sol > 0 else None)

@@ -1153,3 +1153,22 @@ Reportes Operativos Periódicos.
 **Efecto con los datos del 11-nov (ventana 10-nov 07:00 a 11-nov 07:00):** el reporte pasa de 49 a 50 sistemas y los excluidos quedan en los pilotos y las Casas 6 y 300. La Casa 205 generó 22,5 kWh el 10-nov, exportó 0,01 kWh, importó 2,1 kWh y su consumo fue de 24,6 kWh (cobertura solar de 91 %). El yield del portafolio casi no cambia (1131 → 1133) porque la Casa 205 no tiene kWp, y no hay cambios en los cortes (3 en 3 eventos).
 
 **Dónde está el código:** rama `nombre in manual_in` de `motivo_exclusion` en `reporte-diario/reporte_diario.py`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-11-15 — La Casa 63 de Barranquilla (nueva) queda fuera del reporte; el registro distingue por ciudad las casas del mismo nombre (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «No, cuando yo te diga es que vas a agregar esas casas nuevas al reporte, ya que las que van entrando están en pruebas de estabilización» (13-nov) y, sobre la Casa 63 de Barranquilla, «Dejala por fuera yo te dije que las vas a incluir es cuando yo te diga» (15-nov). Confirma la regla del 2026-10-20: las casas nuevas no entran al reporte hasta que el usuario lo pida.
+
+**Qué la originó:** el 13-nov a las 11:03 se dio de alta en Metrum una «Casa 63» en Barranquilla (Terra by Kaia; inversor HP310K2HWC290030 sin marca en los atributos, medidor de red y gateway IN42621813, sin medidor solar), y ya existía una Casa 63 en Cali (Reservas de Pance, Deye, 3,57 kWp). El generador reconocía la casa nueva solo por el nombre (`nombre not in KWP`), así que la de Barranquilla no se veía como nueva y habría entrado al reporte del lunes 16-nov como un sistema más, con los 3,57 kWp de la de Cali. Ponerla en `"fuera"` por nombre habría sacado también a la de Cali.
+
+**Cómo se aplicó:**
+- `potencia_instalada.json`: la clave `casa 63` pasa a `casa 63 (cali)` (un nombre repetido en otra ciudad lleva la ciudad en el registro).
+- `reporte_diario.py`: nueva `kwp_de(s)`, que busca primero `nombre (ciudad)` y, si el nombre tiene claves con ciudad en el registro, no usa el nombre solo para las demás ciudades. `motivo_exclusion` y `analizar` la usan: la casa que no está en el registro sigue saliendo con `MOTIVO_NUEVA`. `mapas_base.py` e `irradiancia_goes.py` también la usan (antes filtraban por nombre).
+- Los nombres de `"fuera"`, `"excluir"` e `"incluir"` en `exclusiones.json` pueden llevar la ciudad: `"Casa 63 (Barranquilla)"` vale solo para esa ciudad; sin ciudad valen para todas. Hoy no hace falta ninguna entrada; queda para cuando el usuario pida incluirla.
+- Para incluir la Casa 63 de Barranquilla cuando el usuario lo pida: agregar `"casa 63 (barranquilla)": kWp` al registro, o `"Casa 63 (Barranquilla)"` a `"incluir"` si aún no hay kWp.
+- La rutina diaria se actualizó: hoy siguen fuera las Casas 6, 124 y 300 y la Casa 63 de Barranquilla (nuevas y sin kWp).
+
+**Efecto (corrida de prueba con la ventana del 14-nov 07:00 al 15-nov 07:00):** `sistemas` sigue en 50 y `solo_baterias` vacío; `excluidos` lista los dos pilotos y las Casas 6, 63 (Barranquilla), 124 y 300, estas cuatro con el motivo «casa nueva en pruebas y estabilización»; la Casa 63 de Cali sigue en el reporte con 3,57 kWp y es la única «Casa 63» de las tablas.
+
+**Dónde está el código:** `kwp_de` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`; registro en `reporte-diario/potencia_instalada.json`.
