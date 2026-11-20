@@ -1172,3 +1172,26 @@ Reportes Operativos Periódicos.
 **Efecto (corrida de prueba con la ventana del 14-nov 07:00 al 15-nov 07:00):** `sistemas` sigue en 50 y `solo_baterias` vacío; `excluidos` lista los dos pilotos y las Casas 6, 63 (Barranquilla), 124 y 300, estas cuatro con el motivo «casa nueva en pruebas y estabilización»; la Casa 63 de Cali sigue en el reporte con 3,57 kWp y es la única «Casa 63» de las tablas.
 
 **Dónde está el código:** `kwp_de` y `motivo_exclusion` en `reporte-diario/reporte_diario.py`; registro en `reporte-diario/potencia_instalada.json`.
+
+## 2026-11-20 — Un hueco de tensión que cruza un corte cuenta en ese corte (corrección del reporte del 20-nov, a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «Seguro que la casa 18Ap tuvo 100% de respaldo ?» y, después, «Por favor revisa bien todos los datos y corrige porque ya no me genera confianza presentar ese reporte» (20-nov).
+
+**Qué la originó:** el reporte del 20-nov (ventana 19-nov 07:00 a 20-nov 07:00) mostró a la Casa 18Ap (Turbaco) con «Respaldo total, vio 0 s, 100 %» en el corte de las 21:56 del 19-nov, pero la casa estuvo sin tensión 1 h 52 min (20:45:54 a 22:38:23). Esa tarde, el medidor de red de la casa registró `po` 19:57:21 y `pr` 20:07:03; después, subtensión (`uv1`, `uv3`), neutro faltante (`mn`) y secuencia de fases invertida (`rps`) hasta las 21:54; `po` 21:56:08 y `pr` 22:38:02, con tensión normal (`nv1`, `nv3`) a las 22:38:03. Con la red degradada el inversor alimentó la casa con la batería hasta que llegó a 15 % (20:45) y se apagó; volvió a las 22:40.
+
+**Causa:** `repartir_huecos` solo asociaba un hueco de tensión de la casa a un corte si empezaba cerca de su inicio, dentro de él o hasta 10 min después de que terminó. El hueco de la 18Ap empezó entre dos cortes (a casi 39 min del anterior), así que quedó entero como «hueco sin corte asociado» y el corte de las 21:56, que la casa vivió a oscuras, salió con 0 s y 100 %. Eso contradecía la regla de que ningún corte sale con 100 % si la casa estuvo a oscuras durante él. El barrido de los reportes diarios del 5 al 20-nov con el generador anterior encontró un único hueco que cruzaba un corte de su casa: el de la Casa 18Ap del 20-nov.
+
+**Cómo se corrigió:**
+- `repartir_huecos`: un hueco que empieza fuera de todo corte pero cruza cortes posteriores de la misma casa cuenta, dentro de cada uno de esos cortes, como «durante» (y «al volver» lo que sigue tras el último); solo su cabeza, antes del primero, queda como «sin corte asociado». Probado con casos sintéticos (hueco entre cortes que no cruza ninguno, dentro de un corte, al caer, 5 min después de un corte, cruzando dos cortes): el comportamiento anterior no cambia.
+- `soc_ult` y `run_ult` (SOC y estado del inversor «al corte del reporte») usan solo datos hasta `W1`. Al regenerar después del corte entraban datos de hasta 10 min posteriores (p. ej. de las 07:09); la rutina, que genera a las 06:51, no tenía ese efecto.
+- README actualizado.
+
+**Auditoría independiente (con consultas nuevas a Metrum):** coinciden con el reporte, para los 50 sistemas: generación del día (balance de cierres, 733,5 kWh), importación (377,2 kWh), exportación (1,46 kWh) y consumo de la ventana, SOC al corte (33 casas en reserva), hora de batería llena, fallas del inversor (6 casas; `igf` ×513, `bsuf` ×109) y la conservación del tiempo sin tensión (todo el hueco de cada casa queda en un corte o sin corte asociado, sin pérdidas ni dobles conteos). Las 32 filas de «Detalle por corte» y las de Rendimiento y Exportación del HTML coinciden con los datos.
+
+**Efecto en el reporte del 20-nov:** respaldo global 97,4 % → 92,3 %; cortes sin hueco 19 → 18; la Casa 18Ap pasa de «Respaldo total» a «Caída durante el respaldo» (0 %; 42 min 15 s sin tensión en el corte; «SOC 15 %: revisar inversor»); su hueco sin corte asociado baja de 1 h 52 min a 1 h 10 min (la cabeza). Al regenerar con datos hasta las 07:00, las baterías en reserva pasan de 34 a 33 (la Casa 111 deja de estar en 20 %) y la importación de 375 a 377 kWh.
+
+**Pendiente (decisión del usuario):** entre 20:07 y 21:54 los medidores de red de Turbaco registraron subtensión, neutro faltante y secuencia de fases invertida; el reporte cuenta ese periodo como red presente (umbral < 5 V), aunque siete inversores entraron en falla o standby (`igf`, `bsuf`). Falta decidir si esas condiciones deben contarse como corte o mostrarse en el reporte.
+
+**Dónde está el código:** `repartir_huecos` y `analizar` (`soc_ult`, `run_ult`) en `reporte-diario/reporte_diario.py`.

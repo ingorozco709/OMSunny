@@ -425,6 +425,8 @@ def repartir_huecos(huecos, cortes, W1):
     si no el último que terminó hasta 10 min antes (al reconectar). Si el hueco sigue después del fin de ese corte, lo que cae dentro de los cortes
     siguientes cuenta en cada uno de ellos (por el tiempo que se solapa) y la tensión que sigue sin volver mientras la red ya regresó (entre cortes o
     después del último) cuenta como "al volver" del corte anterior. Así cada tiempo del hueco se cuenta una sola vez y en el corte que lo vivió.
+    Un hueco que empieza fuera de todo corte (a más de 10 min del anterior) pero cruza un corte posterior de la misma casa cuenta, dentro de ese corte (y de los que siga cruzando),
+    como "durante"; solo su cabeza, antes de ese corte, queda como hueco sin corte asociado (así un corte durante el cual la casa estuvo a oscuras nunca sale con 100 %).
     Devuelve ({id(corte): [tramos]}, [huecos sin corte]); cada tramo: dict(a, b, d en s, tipo, cont=True si continúa un hueco que empezó antes, h_d = duración total del hueco)."""
     cs = sorted((c for c in cortes if c["a"] is not None), key=lambda c: c["a"])
     fin = lambda c: c["b"] if c["b"] is not None else W1
@@ -444,22 +446,33 @@ def repartir_huecos(huecos, cortes, W1):
             else: continue
             if mejor is None or rango < mejor[0]:
                 mejor = (rango, c)
-        if mejor is None:
-            fuera.append(h)
-            continue
-        (kind, _), cur = mejor
-        i = cs.index(cur)
         sig = lambda i_: cs[i_ + 1] if i_ + 1 < len(cs) and cs[i_ + 1]["a"] < hb else None
-        # cabeza del hueco: tipo por la regla de siempre; si empieza cuando el corte ya terminó (al volver, al reconectar o relojes desfasados) va entero al corte
-        if abs(ha - cur["a"]) <= GAP_RADIO: tipo = "al caer"
-        elif cur["b"] is not None and abs(ha - cur["b"]) <= GAP_RADIO: tipo = "al volver"
-        else: tipo = "durante" if (cur["b"] is None or ha < cur["b"]) else "al reconectar"
-        if ha < fin(cur):
+        if mejor is None:
+            # el hueco empieza fuera de todo corte (p. ej. la red volvió degradada y la casa se quedó sin tensión antes del corte siguiente): si cruza cortes de la misma casa,
+            # lo que cae dentro de cada corte cuenta en ese corte (la casa estuvo a oscuras durante él, y ese corte no puede salir con 100 %); la cabeza, antes del primer corte
+            # que cruza, queda como hueco sin corte asociado. Si no cruza ningún corte, el hueco entero queda sin corte asociado.
+            i = next((k for k, c in enumerate(cs) if c["a"] < hb and fin(c) > ha), None)
+            if i is None:
+                fuera.append(h)
+                continue
+            cur = cs[i]
+            if cur["a"] > ha:
+                fuera.append(dict(h, b=cur["a"], d=(cur["a"] - ha) / 1000))
             fin_t = min(hb, fin(cur))
+            tramo(cur, cur["a"], fin_t, "durante", True)
         else:
-            nx = sig(i)
-            fin_t = min(hb, nx["a"] if nx else hb)
-        tramo(cur, ha, fin_t, tipo, False)
+            (kind, _), cur = mejor
+            i = cs.index(cur)
+            # cabeza del hueco: tipo por la regla de siempre; si empieza cuando el corte ya terminó (al volver, al reconectar o relojes desfasados) va entero al corte
+            if abs(ha - cur["a"]) <= GAP_RADIO: tipo = "al caer"
+            elif cur["b"] is not None and abs(ha - cur["b"]) <= GAP_RADIO: tipo = "al volver"
+            else: tipo = "durante" if (cur["b"] is None or ha < cur["b"]) else "al reconectar"
+            if ha < fin(cur):
+                fin_t = min(hb, fin(cur))
+            else:
+                nx = sig(i)
+                fin_t = min(hb, nx["a"] if nx else hb)
+            tramo(cur, ha, fin_t, tipo, False)
         # el hueco sigue: lo que cae dentro de los cortes siguientes cuenta en cada uno; la tensión que no vuelve con la red ya de regreso es "al volver" del anterior
         while fin_t < hb:
             nx = sig(i)
@@ -525,7 +538,8 @@ def analizar(s, D, W0, W1, dias):
     red_presente = bool(rv) and W1 - rv[-1][0] <= 45 * 60000 and rv[-1][1] >= 90 and not red_muerto and (t_caida is None or rv[-1][0] >= t_caida - 120000)
     # inversor sin entrada de red mientras el medidor de red marca tensión: inversor aislado, no es un corte de red
     R["aislado"] = bool(vg_bajo and red_presente)
-    R["live"] = live; R["vg_bajo"] = vg_bajo; R["soc_ult"] = soc[-1] if soc else None
+    soc_w = [x for x in soc if x[0] <= W1]     # SOC al corte del reporte = último dato hasta W1: el generador consulta 10 min más para completar cortes, y al regenerar el reporte después del corte no deben entrar datos posteriores
+    R["live"] = live; R["vg_bajo"] = vg_bajo; R["soc_ult"] = soc_w[-1] if soc_w else (soc[-1] if soc else None)
     # --- cortes de red (medidor de red)
     ev_red = [(t, v) for t, v in S(dr, "event") if v in ("po", "pr")]
     cortes = []
@@ -608,7 +622,8 @@ def analizar(s, D, W0, W1, dias):
     # --- estados del inversor
     est = []
     run = S(di, "invrun")
-    R["run_ult"] = run[-1] if run else None        # último modo del inversor (invrun) y su hora: estado actual
+    run_w = [x for x in run if x[0] <= W1]
+    R["run_ult"] = run_w[-1] if run_w else (run[-1] if run else None)        # último modo del inversor (invrun) y su hora: estado al corte del reporte
     for t, v in run:
         if W0 <= t <= W1 and v in ("fault", "alarm", "standby", "activating", "shutting_down"):
             est.append((t, v))
