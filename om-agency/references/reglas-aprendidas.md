@@ -1195,3 +1195,21 @@ Reportes Operativos Periódicos.
 **Pendiente (decisión del usuario):** entre 20:07 y 21:54 los medidores de red de Turbaco registraron subtensión, neutro faltante y secuencia de fases invertida; el reporte cuenta ese periodo como red presente (umbral < 5 V), aunque siete inversores entraron en falla o standby (`igf`, `bsuf`). Falta decidir si esas condiciones deben contarse como corte o mostrarse en el reporte.
 
 **Dónde está el código:** `repartir_huecos` y `analizar` (`soc_ult`, `run_ult`) en `reporte-diario/reporte_diario.py`.
+
+## 2026-11-23 — Las Casas 63 de Barranquilla y 124 entran al reporte; kWp de la Casa 205 (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «la potencia instalada de la 205 es 5,95kWp, por favor para los siguientes reportes incluye las casas 63 (2,97kWp) y 124 (5,95kWp)» (23-nov), después de preguntar por qué el gráfico de yield mostraba solo 5 de los 7 sistemas de Barranquilla (faltaban la Casa 205, sin kWp, y la Casa 101, sin datos desde el 20-nov 17:00).
+
+**Qué la originó:** la Casa 205 seguía sin kWp (pendiente de la entrada del 2026-11-11), y las Casas 63 de Barranquilla (entrada del 2026-11-15) y 124 estaban fuera como casas nuevas en pruebas y estabilización, a la espera de que el usuario pidiera incluirlas.
+
+**Cómo se aplicó:**
+- `potencia_instalada.json`: `casa 205` = 5,95, `casa 124` = 5,95 y `casa 63 (barranquilla)` = 2,97 (el registro pasa de 49 a 52 casas). Con su kWp en el registro dejan de ser «casa nueva» y entran como sistemas con FV normales.
+- `exclusiones.json`: la Casa 205 sale de `"incluir"` (ya no hace falta; mismo trámite que la Casa 101). Siguen en `"incluir"` las Casas 35, 57, 104 y 447p.
+- Nombre único en el reporte (`construir_sistemas` en `reporte_diario.py`): con las dos Casas 63 dentro del reporte, el nombre dejó de servir como identificador (tablas, gráficas, tarjetas y diccionarios del HTML lo usan como clave). Si el mismo nombre de Metrum existe en más de una ciudad, la de la primera ciudad (CALI, TURBACO, BARRANQUILLA, CARTAGENA) conserva el nombre y las demás llevan el sufijo de su ciudad (`ABREV_CIUDAD`: CLO, TBC, BAQ, CTG): «Casa 63» es la de Cali (Reservas de Pance) y «Casa 63 BAQ» la de Barranquilla (Terra by Kaia). `casa_md` conserva el nombre de Metrum y con él buscan `kwp_de`, `motivo_exclusion` y `motivo_evento_fuera`, así que el registro (`casa 63 (cali)`, `casa 63 (barranquilla)`) y las listas de `exclusiones.json` no cambian.
+- Sistemas esperados en el resumen JSON: 52 (antes 50); `solo_baterias` vacío; `excluidos` trae los dos pilotos y las casas nuevas sin kWp: hoy las Casas 6, 230 y 300 (Barranquilla). La rutina diaria se actualizó con esas cifras.
+
+**Efecto (corrida de prueba con la ventana del lunes 20-nov 07:00 → 23-nov 07:00):** `sistemas` 50 → 52; los 105 cortes y 11 eventos no cambian y las filas de la Casa 63 de Cali son idénticas a las del reporte publicado. Casa 63 BAQ (Livoltek HP3-10KL2, 2,97 kWp): 24,4 kWh en 3 días, yield 999 kWh/kWp·año, 76 % del patrón (baja vs patrón). Casa 124 (Livoltek HP3-15KL2, 5,95 kWp): 70,8 kWh, 1448, 109 %. Casa 205 (5,95 kWp): 69,7 kWh, 1425, 108 %. La generación del portafolio pasa de 2396 a 2573 kWh y el yield proyectado de 1101 a 1126 kWh/kWp·año. El gráfico de yield pasa de 48 a 51 puntos (la Casa 101 sigue sin yield porque no tiene datos).
+
+**Dónde está el código:** `construir_sistemas`, `kwp_de`, `motivo_exclusion` y `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; registro en `reporte-diario/potencia_instalada.json`; lista en `reporte-diario/exclusiones.json`.

@@ -27,6 +27,7 @@ EVENTOS_FUERA = []                    # (casa en minúsculas, desde ms, hasta ms
 EVENTOS_DESCARTADOS = []              # (ciudad, casa, tipo, inicio ms, motivo) de lo que se descartó; lo llena analizar()
 YIELD_PATRON = {"CALI": 1188, "COSTA": 1323}      # kWh/kWp·año: yield patrón de comparación por región, definido por el usuario
 CIUDADES_COSTA = {"TURBACO", "BARRANQUILLA", "CARTAGENA"}
+ABREV_CIUDAD = {"CALI": "CLO", "TURBACO": "TBC", "BARRANQUILLA": "BAQ", "CARTAGENA": "CTG"}      # sufijo del nombre de una casa cuyo nombre en Metrum se repite en otra ciudad (p. ej. «Casa 63 BAQ»)
 BATERIA_LLENA_SOC = 99                # % de SOC con el que se considera la batería llena
 LLENO_TARDE_H = 16                    # hora local: batería llena entre LLENO_ANTES_H y esta hora = "producción limitada en la tarde"; después ya casi no hay sol que limitar
 LLENO_ANTES_H = 12                   # hora local: batería llena antes de esta hora = "producción limitada" (con la batería llena la producción se limita al consumo)
@@ -208,10 +209,10 @@ except (OSError, ValueError):
 
 def kwp_de(s):
     """kWp (pico DC) de un sistema según el registro `potencia_instalada.json`, o None si la casa no está en el registro (casa nueva).
-    El registro se busca por nombre de casa. Si el mismo nombre existe en otra ciudad (hoy «Casa 63», en Cali y en Barranquilla), la clave del registro lleva la ciudad,
-    p. ej. "casa 63 (cali)": en ese caso se busca primero «nombre (ciudad)» y, si el nombre tiene claves con ciudad, el nombre solo ya no vale para las demás ciudades
-    (la casa nueva del mismo nombre en otra ciudad no hereda el kWp de la registrada ni se confunde con una casa en operación)."""
-    nombre = s["casa"].strip().lower()
+    El registro se busca por el nombre de la casa en Metrum (`casa_md`). Si el mismo nombre existe en otra ciudad (hoy «Casa 63», en Cali y en Barranquilla), la clave del registro lleva la ciudad,
+    p. ej. "casa 63 (cali)" y "casa 63 (barranquilla)": en ese caso se busca primero «nombre (ciudad)» y, si el nombre tiene claves con ciudad, el nombre solo ya no vale para las demás ciudades
+    (una casa nueva del mismo nombre en otra ciudad no hereda el kWp de la registrada ni se confunde con una casa en operación)."""
+    nombre = s.get("casa_md", s["casa"]).strip().lower()
     con_ciudad = f"{nombre} ({s['ciudad'].strip().lower()})"
     if con_ciudad in KWP:
         return KWP[con_ciudad]
@@ -277,6 +278,16 @@ def construir_sistemas(devs, attrs):
     for s in SYS.values():
         if s["zona_gw"]:                          # el conjunto de la casa es el de su gateway, el de sus coordenadas: el inversor de la Casa 73 dice RESERVAS DE PANCE en Metrum, pero sus medidores y su gateway
             s["zona"] = s["zona_gw"]              # dicen LLANOS DE PANCE y el usuario confirmó el 5-nov que la casa es de Llanos de Pance
+    # Nombre único en el reporte: si el mismo nombre de casa existe en más de una ciudad (hoy «Casa 63», en Cali y en Barranquilla), la de la primera ciudad (CALI, TURBACO, BARRANQUILLA,
+    # CARTAGENA) conserva el nombre y las demás llevan el sufijo de su ciudad («Casa 63 BAQ»), porque el reporte usa el nombre como identificador en tablas, gráficas y tarjetas.
+    # `casa_md` guarda el nombre de Metrum: con él se buscan el kWp del registro y las listas de exclusiones.
+    por_nombre = {}
+    for k, s in SYS.items():
+        s["casa_md"] = s["casa"]
+        por_nombre.setdefault(s["casa"].strip().lower(), []).append(k)
+    for ks in por_nombre.values():
+        for k in sorted(ks, key=lambda k: ordenar_ciudad(k[0]))[1:]:
+            SYS[k]["casa"] = f'{SYS[k]["casa"]} {ABREV_CIUDAD.get(k[0], k[0][:3])}'
     return SYS
 
 def cargar_exclusiones():
@@ -327,7 +338,7 @@ def motivo_exclusion(s, HPD, d_ini, d_fin, manual_ex, manual_in, fuera=frozenset
       registra con la ciudad, así que la casa nueva del mismo nombre también sale como nueva); "incluir" la deja entrar.
     - Casas sin generación FV: solo tienen las baterías de respaldo instaladas, así que el inversor nunca supera PV_MIN_KWH al día.
     """
-    nombre = s["casa"].strip().lower()
+    nombre = s.get("casa_md", s["casa"]).strip().lower()
     claves = {nombre, f"{nombre} ({s['ciudad'].strip().lower()})"}   # "Casa 63" (en cualquier ciudad) o "Casa 63 (Barranquilla)" (solo en esa)
     if claves & fuera:
         return MOTIVO_FUERA
@@ -489,7 +500,7 @@ def repartir_huecos(huecos, cortes, W1):
 # ------------------------------------------------------------------ análisis por sistema
 def motivo_evento_fuera(s, t, tipo):
     """Motivo (o None) por el que un evento de la casa que empieza en t (ms) se descarta según eventos_fuera de exclusiones.json; deja constancia en EVENTOS_DESCARTADOS."""
-    nombre = s["casa"].strip().lower()
+    nombre = s.get("casa_md", s["casa"]).strip().lower()
     for casa, t0, t1, motivo in EVENTOS_FUERA:
         if casa == nombre and t0 <= t < t1:
             EVENTOS_DESCARTADOS.append((s["ciudad"], s["casa"], tipo, t, motivo))
