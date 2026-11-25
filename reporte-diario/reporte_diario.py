@@ -10,7 +10,7 @@ Ventana: martes a viernes, las últimas 24 h. Lunes, desde el viernes a las 7:00
 Variables de entorno: METRUM_API_URL, METRUM_USERNAME, METRUM_PASSWORD.
 Solo lee datos de Metrum; no escribe nada en la plataforma.
 """
-import os, sys, json, math, time, argparse, html, re, collections, statistics as st
+import os, sys, json, math, time, argparse, html, re, collections, unicodedata, statistics as st
 import datetime as dt, concurrent.futures as cf, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -698,8 +698,11 @@ def main():
     ap.add_argument("--fin"); ap.add_argument("--inicio")
     ap.add_argument("--solo-interrupciones", dest="solo_interrupciones", action="store_true",
                     help="reporte exclusivo de interrupciones: desde las 00:00 del día de --fin (o de ahora) hasta la hora de corte")
+    ap.add_argument("--zona", help="solo con --solo-interrupciones: limita el reporte a un conjunto residencial (zona de Metrum, p. ej. \"Terra by Kaia\"); sin tildes ni mayúsculas")
     ap.add_argument("--salida", default="reporte_diario.html"); ap.add_argument("--json", default="resumen_diario.json")
     args = ap.parse_args()
+    if args.zona and not args.solo_interrupciones:
+        sys.exit("--zona solo se usa con --solo-interrupciones")
     W0, W1, ini, fin = ventana(args)
     es_lunes = fin.weekday() == 0 and not args.inicio and not args.solo_interrupciones
     # días locales de la ventana cuya jornada solar termina antes del fin (para generación y exportación)
@@ -715,6 +718,13 @@ def main():
     with cf.ThreadPoolExecutor(8) as ex:
         attrs = {dv["id"]["id"]: a for dv, a in ex.map(atributos, devs)}
     SYS = construir_sistemas(devs, attrs)
+    if args.zona:
+        # reporte de un solo conjunto (pedido del usuario, 25-nov): solo los sistemas de esa zona (la del gateway); el resto del portafolio no se consulta ni se cuenta
+        _sin_tilde = lambda t: "".join(c for c in unicodedata.normalize("NFKD", str(t or "")) if not unicodedata.combining(c)).strip().lower()
+        _sel = {k: v for k, v in SYS.items() if _sin_tilde(v.get("zona")) == _sin_tilde(args.zona)}
+        if not _sel:
+            sys.exit(f"--zona «{args.zona}» no coincide con ninguna zona de Metrum. Zonas: " + ", ".join(sorted({v.get("zona") for v in SYS.values() if v.get("zona")})))
+        SYS = _sel
     # histórico de generación FV (9 días): patrón propio de cada casa y detección de casas sin FV
     HPD = {}
     h0 = ts_bog(ini.year, ini.month, ini.day) - 9 * 86400000

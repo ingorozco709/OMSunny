@@ -1213,3 +1213,23 @@ Reportes Operativos Periódicos.
 **Efecto (corrida de prueba con la ventana del lunes 20-nov 07:00 → 23-nov 07:00):** `sistemas` 50 → 52; los 105 cortes y 11 eventos no cambian y las filas de la Casa 63 de Cali son idénticas a las del reporte publicado. Casa 63 BAQ (Livoltek HP3-10KL2, 2,97 kWp): 24,4 kWh en 3 días, yield 999 kWh/kWp·año, 76 % del patrón (baja vs patrón). Casa 124 (Livoltek HP3-15KL2, 5,95 kWp): 70,8 kWh, 1448, 109 %. Casa 205 (5,95 kWp): 69,7 kWh, 1425, 108 %. La generación del portafolio pasa de 2396 a 2573 kWh y el yield proyectado de 1101 a 1126 kWh/kWp·año. El gráfico de yield pasa de 48 a 51 puntos (la Casa 101 sigue sin yield porque no tiene datos).
 
 **Dónde está el código:** `construir_sistemas`, `kwp_de`, `motivo_exclusion` y `motivo_evento_fuera` en `reporte-diario/reporte_diario.py`; registro en `reporte-diario/potencia_instalada.json`; lista en `reporte-diario/exclusiones.json`.
+
+## 2026-11-25 — Reporte de interrupciones de un solo conjunto (`--zona`) y de una sola interrupción (`--inicio`) (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «Genérame un reporte de la última interrupción que hubo en Terra» y, al recibir el reporte de todo Barranquilla, «yo dije claramente que el reporte era solo del conjunto Terra, no de todos los sistemas de Barranquilla» (25-nov).
+
+**Qué la originó:** `--solo-interrupciones` solo sabía de ventanas de día completo y de todo el portafolio. El primer intento salió como «Interrupciones de hoy · Barranquilla»: 52 sistemas y 4 ciudades en el encabezado, el estado actual con Castellana Real y Gerona Club House, y los dos cortes del día (09:02 y 10:24) en vez de la última interrupción.
+
+**Regla:** cuando el usuario nombre un conjunto (Terra, Reservas de Pance…), el reporte es solo de ese conjunto: no se mezclan los demás sistemas de la ciudad. Cuando pida «la última interrupción», la ventana es solo la de ese evento (empieza unos minutos antes del primer corte y termina ahora), no el día completo.
+
+**Cómo se aplicó:**
+- `--zona "Terra by Kaia"` (solo con `--solo-interrupciones`; sin importar tildes ni mayúsculas): `main()` deja en `SYS` solo los sistemas de esa zona (la del gateway) justo después de `construir_sistemas`, así que no se consultan ni se cuentan los demás (cifras, eventos, estado actual, mapa). Si la zona no existe, lista las zonas de Metrum. Las casas nuevas siguen fuera por `exclusiones.json`.
+- En el HTML el conjunto ocupa el lugar de la ciudad: `ALIAS_CIUDAD`, `_nc` y `_nc_corto` en `reporte_html.py` sustituyen a `ciudad.title()` en títulos, tablas, tarjeta «Por conjunto», eventos, mapa de calor y línea de tiempo (sin zona, el alias está vacío y el resultado es idéntico al de antes; comprobado con la misma ventana, solo difieren tres datos de las 11:20 y 11:22 que llegaron después). El rótulo superior dice el conjunto y el número de sistemas.
+- `--inicio` con `--solo-interrupciones` ya acotaba la ventana; ahora «Límites del análisis» dice el periodo real y no «desde las 00:00 de hoy».
+- Arreglos de texto de paso: «1 evento» en vez de «1 eventos» en la tarjeta de sistemas con cortes; «Cada dato del inversor lleva su hora» en lugar de «muestras cada 15 min» en el estado actual, y «cada minuto o cada 15 min, según el sistema» en «Límites del análisis» (desde el 21-oct los sistemas pasan a datos cada minuto).
+
+**Efecto (Terra by Kaia, corte del 25-nov 10:24, ventana 10:15 → 11:37):** 7 sistemas (Casas 24, 63 BAQ, 101, 124, 155, 205 y 287; las Casas 230 y 300 son nuevas y siguen fuera), 1 evento de 34 s: 4 con respaldo total, 2 con transferencia (101: 15 s, 124: 14 s) y 1 sin respaldo (Casa 205, 59 s).
+
+**Dónde está el código:** `--zona` en `main()` de `reporte-diario/reporte_diario.py`; `ALIAS_CIUDAD`, `_nc`, `_nc_corto`, `ZONA_REP`, `kick_int`, `lim_ventana` y `lim_zona` en `reporte-diario/reporte_html.py`.

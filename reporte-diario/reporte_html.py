@@ -245,6 +245,21 @@ def _pl(n, uno, varios):
     return f"{n} {uno if n == 1 else varios}"
 
 
+ALIAS_CIUDAD = {}      # reporte de un solo conjunto (--zona): el nombre que se muestra en lugar de la ciudad es el del conjunto; vacío en los demás reportes
+
+
+def _nc(c):
+    """Nombre de la ciudad para mostrar: el del conjunto en un reporte de un solo conjunto (--zona), si no la ciudad con mayúscula inicial."""
+    return ALIAS_CIUDAD.get(c) or c.title()
+
+
+def _nc_corto(c):
+    """Etiqueta corta de la ciudad (columnas del mapa de calor): «B/quilla», los 9 primeros caracteres o, en un reporte de un solo conjunto, la primera palabra del conjunto."""
+    if ALIAS_CIUDAD.get(c):
+        return ALIAS_CIUDAD[c].split()[0][:9]
+    return "B/quilla" if c.upper().startswith("BARRANQ") else c.title()[:9]
+
+
 def _pill(nivel, txt):
     return f'<span class="pill {nivel}">{esc(txt)}</span>'
 
@@ -308,6 +323,13 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     css = open(os.path.join(HERE, "estilos.css"), encoding="utf8").read() + EXTRA_CSS + (MAPA.CSS if MAPA else "") + (MAPAZ.CSS if MAPAZ else "")
     n_sys = len(RS)
     ciudades = sorted({R["sys"]["ciudad"] for R in RS}, key=ordenar_ciudad)
+    # reporte de un solo conjunto (--zona, solo con --solo-interrupciones): el conjunto ocupa el lugar de la ciudad en todos los rótulos
+    ZONA_REP = None
+    ALIAS_CIUDAD.clear()
+    if getattr(args, "zona", None):
+        _zs = sorted({R["sys"]["zona"] for R in RS if R["sys"].get("zona")})
+        ZONA_REP = (MAPA.titulo if MAPA else str.title)(_zs[0]) if _zs else str(args.zona)
+        ALIAS_CIUDAD.update({c: ZONA_REP for c in ciudades})
     ndias = len(dias)
     nombre_dias = [_dia(d0) for d0, _ in dias]
     # periodos de los datos: la ventana del reporte (no empieza ni termina a medianoche) y los días completos (00:00–24:00, con cierre diario del medidor)
@@ -436,7 +458,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         resumen = []
         for e in sig[:6]:
             dur = "en curso" if e["fin"] is None else fmt(e["dur"] or 0)
-            resumen.append(f"{e['ciudad'].title()} {hbd(e['ini'])} ({e['n']} de {n_por_ciudad.get(e['ciudad'], 0)} sistemas, {dur})")
+            resumen.append(f"{_nc(e['ciudad'])} {hbd(e['ini'])} ({e['n']} de {n_por_ciudad.get(e['ciudad'], 0)} sistemas, {dur})")
         txt = f"{len(con_cortes)} de {n_sys} sistemas tuvieron cortes de red: {_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}."
         if resumen:
             txt += " Principales: " + "; ".join(resumen) + ("." if len(sig) <= 6 else f"; y {len(sig)-6} más.")
@@ -515,7 +537,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         return f'<div class="scroll"><table class="{cls}" style="min-width:{ancho}px"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
     # KPIs
-    k_sis = f'<div class="kpi {"k-crit" if en_curso else ("k-warn" if con_cortes else "k-ok")}"><div class="v">{len(con_cortes)} <small>de {n_sys}</small></div><div class="l">sistemas con cortes de red en la ventana ({total_cortes} cortes en {len(EV)} eventos).{" " + str(len(en_curso)) + " siguen sin red." if en_curso else ""}</div></div>'
+    k_sis = f'<div class="kpi {"k-crit" if en_curso else ("k-warn" if con_cortes else "k-ok")}"><div class="v">{len(con_cortes)} <small>de {n_sys}</small></div><div class="l">sistemas con cortes de red en la ventana ({_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}).{" " + str(len(en_curso)) + " siguen sin red." if en_curso else ""}</div></div>'
     k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV del portafolio Sunny en {ndias} {"día" if ndias == 1 else "días"}{(" (patrón " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
     k_exp = f'<div class="kpi"><div class="v">{dec(exp_tot, 0)} <small>kWh</small></div><div class="l">de energía activa exportada a la red entre el {hbd(W0)} y el {hbd(W1)}; importada {dec(imp_tot, 0)} kWh en el mismo periodo.</div></div>'
     cob_txt = "—"
@@ -642,7 +664,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         mx = max(mem, key=lambda m: m[1]["perc"])
         cobs = [c["cob"] for R, c in mem if c["cob"] is not None]
         fin_txt = "en curso" if e["fin"] is None else hbd(e["fin"])
-        rows.append(f'<tr><td>{esc(e["ciudad"].title())}</td><td>{hbd(e["ini"])}</td><td>{fin_txt}</td><td class="n">{e["n"]} de {n_por_ciudad.get(e["ciudad"], 0)}</td><td class="n">{fmt(e["dur"]) if e["dur"] else "—"}</td><td class="n">{nper} de {e["n"]}</td><td class="n">{fmt(mx[1]["perc"]) if mx[1]["perc"] else "—"}<small>{esc(mx[0]["sys"]["casa"]) if mx[1]["perc"] else ""}</small></td><td class="n">{(dec(st.median(cobs), 1) + " %") if cobs else "—"}</td></tr>')
+        rows.append(f'<tr><td>{esc(_nc(e["ciudad"]))}</td><td>{hbd(e["ini"])}</td><td>{fin_txt}</td><td class="n">{e["n"]} de {n_por_ciudad.get(e["ciudad"], 0)}</td><td class="n">{fmt(e["dur"]) if e["dur"] else "—"}</td><td class="n">{nper} de {e["n"]}</td><td class="n">{fmt(mx[1]["perc"]) if mx[1]["perc"] else "—"}<small>{esc(mx[0]["sys"]["casa"]) if mx[1]["perc"] else ""}</small></td><td class="n">{(dec(st.median(cobs), 1) + " %") if cobs else "—"}</td></tr>')
     ev_head = '<th>Ciudad</th><th>Inicio</th><th>Fin</th><th class="n">Sistemas<br>afectados</th><th class="n">Duración<br>típica</th><th class="n">Casas con<br>hueco</th><th class="n">Mayor tiempo<br>sin tensión</th><th class="n">Respaldo<br>mediano</th>'
     sec_ev = tabla(ev_head, rows, 820) if rows else '<p class="note">Sin cortes de red en la ventana.</p>'
 
@@ -687,7 +709,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         soc_i = lambda x: "—" if x is None else f"{x:.0f}"
         celda_ult = (f'<td style="white-space:nowrap"><b>{hbd(ultimo["a"])}{"≈" if ultimo.get("estimado") else ""} → {_fin(ultimo)}</b>'
                      f'<small>{fmt(ultimo["dur"] or 0)}</small><small>SOC {soc_i(ultimo.get("soc0"))} → {soc_i(ultimo.get("soc1"))} %</small><small>respaldo {_pct(ultimo)}</small></td>')
-        rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}{f"<small>{ocultos} más en el detalle</small>" if ocultos else ""}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(perc) if perc else "—"}</td>{celda_ult}{celdas_prev}<td>{estado}</td><td>{celda_resp}</td></tr>')
+        rows.append(f'<tr class="{cls}"><td><b>{esc(s["casa"])}</b><small>{esc(_nc(s["ciudad"]))} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td><td class="n">{len(cc)}{f"<small>{ocultos} más en el detalle</small>" if ocultos else ""}</td><td class="n">{fmt(tot)}</td><td class="n">{fmt(perc) if perc else "—"}</td>{celda_ult}{celdas_prev}<td>{estado}</td><td>{celda_resp}</td></tr>')
     sis_head = ('<th>Sistema</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Tiempo que<br>vio la casa</th>'
                 + '<th>Último corte<br>inicio → fin · duración<br>SOC inicio → fin · respaldo</th>'
                 + "".join(f'<th class="n">Anterior {i + 1}<br>% respaldo<br>hora · sin red · vio</th>' for i in range(n_prev))
@@ -709,7 +731,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             soc = R["soc_ult"]
             soc_act = f"{soc[1]:.0f} %<small>{hb(soc[0])}</small>" if soc else "—"
             estado = _pill("crit", "sin red") if R["en_curso"] else ""
-            rows.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(s["ciudad"].title())} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td>' + "".join(f'<td class="n">{x}</td>' for x in celdas) + f'<td class="n">{soc_act}</td><td>{estado}</td></tr>')
+            rows.append(f'<tr class="{"r0" if R["en_curso"] else ""}"><td><b>{esc(s["casa"])}</b><small>{esc(_nc(s["ciudad"]))} · {esc(s["marca"].title())} {esc(s["modelo"])}</small></td>' + "".join(f'<td class="n">{x}</td>' for x in celdas) + f'<td class="n">{soc_act}</td><td>{estado}</td></tr>')
         bat_head = '<th>Casa</th><th class="n">Cortes</th><th class="n">Tiempo<br>sin red</th><th class="n">Tiempo que<br>vio la casa</th><th class="n">Respaldo<br>(peor corte)</th><th class="n">SOC inicio → mín → fin<br>(mayor corte)</th><th class="n">SOC<br>actual</th><th>Ahora</th>'
         uno = len(RB) == 1
         sin_cortes = all(not R["cortes"] for R in RB)
@@ -728,7 +750,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     for R in con_cortes:
         for c in sorted(R["cortes"], key=lambda c: c["a"]):
             fin_c = "en curso" if c["b"] is None else hbd(c["b"])
-            rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(R["sys"]["ciudad"].title())}</small></td><td>{hbd(c["a"])}{"≈" if c.get("estimado") else ""}</td><td>{fin_c}</td><td class="n">{fmt(c["dur"])}</td><td class="n">{fmt(c["caer"]) if c["caer"] else "—"}</td><td class="n">{durante_txt(c)}</td><td class="n">{fmt(c["volver"]) if c["volver"] else "—"}</td><td class="n">{fmt(c["perc"]) if c["perc"] else "—"}</td><td class="n">{(dec(c["cob"], 1) + " %") if c["cob"] is not None else "—"}</td><td class="n">{soc_txt(c)}</td></tr>')
+            rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(_nc(R["sys"]["ciudad"]))}</small></td><td>{hbd(c["a"])}{"≈" if c.get("estimado") else ""}</td><td>{fin_c}</td><td class="n">{fmt(c["dur"])}</td><td class="n">{fmt(c["caer"]) if c["caer"] else "—"}</td><td class="n">{durante_txt(c)}</td><td class="n">{fmt(c["volver"]) if c["volver"] else "—"}</td><td class="n">{fmt(c["perc"]) if c["perc"] else "—"}</td><td class="n">{(dec(c["cob"], 1) + " %") if c["cob"] is not None else "—"}</td><td class="n">{soc_txt(c)}</td></tr>')
     det_head = '<th>Sistema</th><th>Inicio</th><th>Fin</th><th class="n">Duración</th><th class="n">Hueco<br>al caer</th><th class="n">Hueco<br>durante</th><th class="n">Hueco<br>al volver</th><th class="n">Total que<br>vio la casa</th><th class="n">Respaldo</th><th class="n">SOC inicio → mín → fin</th>'
     sec_det = f'<details><summary>Detalle por corte ({len(rows)} filas)</summary><div style="margin-top:10px">{tabla(det_head, rows, 900)}</div></details>' if rows else ""
 
@@ -736,7 +758,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     rows = []
     for c in ciudades:
         _pt = patron_yield(c)
-        rows.append(f'<tr class="ciudad"><td colspan="{5 + ndias}">{esc(c.title())}{f" · yield patrón {_pt} kWh/kWp·año" if _pt else ""}</td></tr>')
+        rows.append(f'<tr class="ciudad"><td colspan="{5 + ndias}">{esc(_nc(c))}{f" · yield patrón {_pt} kWh/kWp·año" if _pt else ""}</td></tr>')
         for R in [R for R in RS if R["sys"]["ciudad"] == c]:
             s = R["sys"]
             cols = "".join(f'<td class="n">{_kwh(R["pv"].get(d0))}</td>' for d0, _ in dias)
@@ -748,7 +770,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # exportación
     rows = []
     for c in ciudades:
-        rows.append(f'<tr class="ciudad"><td colspan="{7 + len(segs_ex)}">{esc(c.title())}</td></tr>')
+        rows.append(f'<tr class="ciudad"><td colspan="{7 + len(segs_ex)}">{esc(_nc(c))}</td></tr>')
         for R in sorted([R for R in RS if R["sys"]["ciudad"] == c], key=lambda R: -(R["exp"].get("total") or 0)):
             s = R["sys"]; t = R["exp"].get("total")
             cols = "".join(f'<td class="n">{_kwh(R["exp"].get(d0), 2)}</td>' for d0, _, _ in segs_ex)
@@ -763,7 +785,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     # comunicación
     rows = []
     for R, nom, t in sorted(stale, key=lambda x: x[2]):
-        rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(R["sys"]["ciudad"].title())}</small></td><td>{nom}</td><td>{hbd(t)}</td><td class="n">{fmt((W1 - t) / 1000)}</td></tr>')
+        rows.append(f'<tr><td><b>{esc(R["sys"]["casa"])}</b><small>{esc(_nc(R["sys"]["ciudad"]))}</small></td><td>{nom}</td><td>{hbd(t)}</td><td class="n">{fmt((W1 - t) / 1000)}</td></tr>')
     sec_com = tabla('<th>Sistema</th><th>Dispositivo</th><th>Último dato / offline desde</th><th class="n">Hace</th>', rows, 520) if rows else '<p class="note">Todos los medidores e inversores reportaron en las últimas 2 h y ningún gateway está offline.</p>'
 
     # resumen por ciudad
@@ -778,7 +800,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         exc = sum(R["exp"]["total"] for R in g if R["exp"].get("total") is not None)
         sd = sum(1 for R in g if R["ult"]["inv"] is None or W1 - R["ult"]["inv"] > 2 * 3600000)
         cuts = sum(len(R["cortes"]) for R in g)
-        rows.append(f'<tr><td><b>{esc(c.title())}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{cuts}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td><td class="n">{dec(pvc, 0)}</td><td class="n">{dec(yc, 0) if yc else "—"}</td><td class="n">{(dec(cobc, 0) + " %") if cobc is not None else "—"}</td><td class="n">{dec(exc, 1)}</td></tr>')
+        rows.append(f'<tr><td><b>{esc(_nc(c))}</b></td><td class="n">{len(g)}</td><td class="n">{sum(1 for R in g if R["cortes"])}</td><td class="n">{cuts}</td><td class="n">{sum(1 for R in g if R["en_curso"])}</td><td class="n">{dec(pvc, 0)}</td><td class="n">{dec(yc, 0) if yc else "—"}</td><td class="n">{(dec(cobc, 0) + " %") if cobc is not None else "—"}</td><td class="n">{dec(exc, 1)}</td></tr>')
     sec_ciu = tabla('<th>Ciudad</th><th class="n">Sistemas</th><th class="n">Con<br>cortes</th><th class="n">Cortes</th><th class="n">Sin red<br>ahora</th><th class="n">Generación<br>FV kWh</th><th class="n">Yield anual proyectado<br>kWh/kWp·año</th><th class="n">Cobertura<br>solar</th><th class="n">Exportada<br>kWh</th>', rows, 760)
 
     # por día (lunes)
@@ -852,7 +874,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             s = R["sys"]
             if s["ciudad"] != ciu_ant:
                 ciu_ant = s["ciudad"]
-                svg.append(f'<text class="lbl" x="4" y="{y + 11}">{esc(ciu_ant.title())}</text>')
+                svg.append(f'<text class="lbl" x="4" y="{y + 11}">{esc(_nc(ciu_ant))}</text>')
                 y += 18
             svg.append(f'<text class="sm" x="{X0 - 8}" y="{y + 11}" text-anchor="end">{esc(s["casa"])}</text><line class="lane" x1="{X0}" y1="{y + RH - 1}" x2="{X0 + PW}" y2="{y + RH - 1}"/>')
             _orden = sorted(R["cortes"], key=lambda c_: c_["a"])
@@ -932,7 +954,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             sy.append(f'<line class="{cls}" x1="{x:.1f}" y1="14" x2="{x:.1f}" y2="{14 + len(lan) * LH}"/><text class="ax" x="{x:.1f}" y="{14 + len(lan) * LH + 14}" text-anchor="middle">{tick * 100:.0f} %</text>')
         for i, c in enumerate(lan):
             yy = 14 + i * LH
-            sy.append(f'<text class="lbl" x="4" y="{yy + 24}">{esc(c.title())}</text><line class="lane" x1="{XY0}" y1="{yy + LH}" x2="{XY0 + PY}" y2="{yy + LH}"/>')
+            sy.append(f'<text class="lbl" x="4" y="{yy + 24}">{esc(_nc(c))}</text><line class="lane" x1="{XY0}" y1="{yy + LH}" x2="{XY0 + PY}" y2="{yy + LH}"/>')
             grp = sorted([(R, r) for R, r in pts if R["sys"]["ciudad"] == c], key=lambda x: x[1])
             for j, (R, r) in enumerate(grp):
                 niv = "w" if r < YIELD_ALERTA else "ok"
@@ -961,7 +983,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             pat_c = patron_yield(c)
             res_c = sum(1 for R in list(g) + [Q for Q in RB if Q["sys"]["ciudad"] == c] if R["soc_ult"] and R["soc_ult"][1] <= RESERVA)
             ico = _ico[peor]
-            tarj_c += (f'<div class="sm-card {peor}"><div class="t"><span class="ic" aria-hidden="true">{ico}</span>{esc(c.title())}</div>'
+            tarj_c += (f'<div class="sm-card {peor}"><div class="t"><span class="ic" aria-hidden="true">{ico}</span>{esc(_nc(c))}</div>'
                        f'<div class="v">{len(con)}<span class="de"> de {len(g)}</span></div><small>sistemas con cortes</small>'
                        f'<div class="kv"><span>Generación</span><b>{dec(gen_c, 0)} kWh</b></div>'
                        f'<div class="kv"><span>Cobertura solar</span><b>{dec(cob_c, 0) + " %" if cob_c is not None else "—"}</b></div>'
@@ -973,7 +995,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             g = [R for R in RS if c is None or R["sys"]["ciudad"] == c]
             ok_c = [R for R in g if R["cons_cli"] and R["cons_cli"] > 0 and R["pv_tot"] is not None]
             if ok_c:
-                filas_g.append(("Portafolio Sunny" if c is None else c.title(), sum(R["pv_tot"] for R in ok_c), sum(R["cons_cli"] for R in ok_c)))
+                filas_g.append(("Portafolio Sunny" if c is None else _nc(c), sum(R["pv_tot"] for R in ok_c), sum(R["cons_cli"] for R in ok_c)))
         mx = max([max(a, b) for _, a, b in filas_g] or [1])
         GX, GW, GH = 130, 600, 50
         sg = []
@@ -1074,7 +1096,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 fecha_txt = f"{DIAS[f_ev.weekday()][:3]} {f_ev.day} {MESES[f_ev.month - 1]}"
                 if j and _fecha_ev(e) != _fecha_ev(evs[j - 1]):      # separador entre días distintos
                     shm.append(f'<line class="grid dia" x1="{x}" y1="0" x2="{x}" y2="{TY + len(casas_hm) * CHc}"/>')
-                shm.append(f'<text class="ax ax-f" x="{x + CWc / 2:.1f}" y="12" text-anchor="middle">{fecha_txt}</text><text class="ax" x="{x + CWc / 2:.1f}" y="27" text-anchor="middle">{esc("B/quilla" if e["ciudad"].upper().startswith("BARRANQ") else e["ciudad"].title()[:9])}</text><text class="ax" x="{x + CWc / 2:.1f}" y="40" text-anchor="middle">{hb(e["ini"])}</text>')
+                shm.append(f'<text class="ax ax-f" x="{x + CWc / 2:.1f}" y="12" text-anchor="middle">{fecha_txt}</text><text class="ax" x="{x + CWc / 2:.1f}" y="27" text-anchor="middle">{esc(_nc_corto(e["ciudad"]))}</text><text class="ax" x="{x + CWc / 2:.1f}" y="40" text-anchor="middle">{hb(e["ini"])}</text>')
             for i, R in enumerate(casas_hm):
                 yy = TY + i * CHc
                 shm.append(f'<text class="sm" x="{LX - 8}" y="{yy + 14}" text-anchor="end">{esc(R["sys"]["casa"])}</text>')
@@ -1088,7 +1110,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     v = min(cobs_) if cobs_ else None
                     niv = "n" if v is None else ("g" if v >= 99 else ("w" if v >= 90 else "c"))
                     vio_ = sum(c.get("perc") or 0 for c in mis)
-                    tip = f'{R["sys"]["casa"]} · {e["ciudad"].title()} {hbd(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
+                    tip = f'{R["sys"]["casa"]} · {_nc(e["ciudad"])} {hbd(e["ini"])} · respaldo {dec(v, 1) + " %" if v is not None else "sin dato"} · la casa vio {fmt(vio_) if vio_ else "0 s"}'
                     shm.append(f'<g><title>{esc(tip)}</title><rect class="hm {niv}" x="{x + 1}" y="{yy + 1}" width="{CWc - 2}" height="{CHc - 2}" rx="2"/><text class="hmt {niv}" x="{x + CWc / 2:.1f}" y="{yy + 14}" text-anchor="middle">{(dec(v, 1) if 97 <= v < 100 else dec(v, 0)) if v is not None else "—"}</text></g>')
             grafico_hm = f'<div class="scroll"><svg viewBox="0 0 {LX + len(evs) * CWc + 8} {TY + len(casas_hm) * CHc + 6}" role="img" aria-label="Porcentaje de respaldo de cada casa en cada evento de red" style="width:{LX + len(evs) * CWc + 8}px;min-width:0;max-width:none">{"".join(shm)}</svg></div><div class="legend"><span><i class="lg g"></i>✓ 99 % o más</span><span><i class="lg w"></i>▲ 90 a 99 %</span><span><i class="lg c"></i>✕ menos de 90 %</span><span><i class="lg vacia"></i>la casa no tuvo ese corte</span><span>cada celda es el % de respaldo del corte; incluye todos los eventos de red de la ventana</span></div>'
         # ---- hora en que la batería llegó a 99 % (producción limitada)
@@ -1193,7 +1215,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 cobs_c = [c_["cob"] for R in con for c_ in R["cortes"] if c_.get("cob") is not None]
                 mayor_c = max((e["dur"] or 0 for e in evs_c), default=0)
                 res_c = sum(1 for R in list(g) + [Q for Q in RB if Q["sys"]["ciudad"] == c] if R["soc_ult"] and R["soc_ult"][1] <= RESERVA)
-                tarj_c_int += (f'<div class="sm-card {peor}"><div class="t"><span class="ic" aria-hidden="true">{_ico[peor]}</span>{esc(c.title())}</div>'
+                tarj_c_int += (f'<div class="sm-card {peor}"><div class="t"><span class="ic" aria-hidden="true">{_ico[peor]}</span>{esc(_nc(c))}</div>'
                                f'<div class="v">{len(con)}<span class="de"> de {len(g)}</span></div><small>sistemas con cortes</small>'
                                f'<div class="kv"><span>Cortes · eventos</span><b>{sum(len(R["cortes"]) for R in g)} · {len(evs_c)}</b></div>'
                                f'<div class="kv"><span>Evento más largo</span><b>{fmt(mayor_c) if mayor_c else "—"}</b></div>'
@@ -1226,10 +1248,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                     w_e = max(6.0, x2 - x1)
                     n_tot = n_por_ciudad.get(e["ciudad"], 0)
                     txt_e = f'{e["n"]} de {n_tot} · {fmt(e["dur"]) if e["dur"] else "—"}' + (f' · {dec(peor_e[0], 1)} % ({peor_e[1]})' if peor_e else "")
-                    tip_e = (f'{e["ciudad"].title()} · {hbd(e["ini"])}–{"en curso" if e["fin"] is None else hbd(e["fin"])} · {e["n"]} de {n_tot} sistemas · duración típica {fmt(e["dur"]) if e["dur"] else "—"}'
+                    tip_e = (f'{_nc(e["ciudad"])} · {hbd(e["ini"])}–{"en curso" if e["fin"] is None else hbd(e["fin"])} · {e["n"]} de {n_tot} sistemas · duración típica {fmt(e["dur"]) if e["dur"] else "—"}'
                              + (f' · peor respaldo {dec(peor_e[0], 1)} % ({peor_e[1]})' if peor_e else "")
                              + f' · casas con hueco: {len({id(R_) for R_, c_ in mem if (c_.get("perc") or 0) > 0})}')
-                    se.append(f'<g class="tg"><title>{esc(tip_e)}</title><text class="sm" x="{EX0 - 8}" y="{yy + 15}" text-anchor="end">{esc(e["ciudad"].title()[:11])} {hb(e["ini"])}</text>'
+                    se.append(f'<g class="tg"><title>{esc(tip_e)}</title><text class="sm" x="{EX0 - 8}" y="{yy + 15}" text-anchor="end">{esc(_nc_corto(e["ciudad"]) if ALIAS_CIUDAD else e["ciudad"].title()[:11])} {hb(e["ini"])}</text>'
                               f'<line class="lane" x1="{EX0}" y1="{yy + ERH - 3}" x2="{EX0 + EPW}" y2="{yy + ERH - 3}"/>'
                               f'<rect class="tl {niv_e}" x="{x1:.1f}" y="{yy + 3}" width="{w_e:.1f}" height="{ERH - 9}" rx="3"/>'
                               f'<text class="soc-n" x="{EX0 + EPW + ETX}" y="{yy + 16}">{esc(txt_e)}</text></g>')
@@ -1373,7 +1395,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <div class="limits">
     <p>Los medidores de red sin tensión envían sus eventos guardados solo cuando vuelve la red. Un corte en curso se detecta con el inversor (entrada de red por debajo de 5 V) y su hora de inicio es aproximada (≈) hasta que vuelva la red. También lleva ≈ el corte cuyo evento de caída no llegó (solo el de regreso de la red): su inicio se estima con la última tensión vista en el medidor de red o en el inversor.</p>
     <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes.</p>
-    <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
+    <p>Los inversores se muestrean cada minuto o cada 15 min, según el sistema. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>{_nota_ventana}</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.</p>
     <p>{_nota_cierres} La generación de todos los sistemas se calcula con el balance de medidores.{lim_bat}</p>
@@ -1400,7 +1422,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
   <h2>Vista rápida</h2>
   <div class="card" style="display:flex;flex-direction:column;gap:18px">
     {('<h3>Semáforo del respaldo (último corte de cada casa)</h3><div class="sema">' + tarjetas + '</div>') if _cs else ''}
-    <h3>Por ciudad</h3>
+    <h3>{"Por conjunto" if ZONA_REP else "Por ciudad"}</h3>
     <div class="sema">{tarj_c_int}</div>
     {mapa_blq}
     {('<h3>Eventos de red del día</h3>' + grafico_ev) if grafico_ev else ''}
@@ -1418,7 +1440,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         _niv_v = {"Caída durante el respaldo": "crit", "Sin respaldo": "crit", "Retardo de transferencia": "warn", "Respaldo total con transferencia": "okp", "Respaldo total": "okp"}
         _modo = {"normal": ("okp", "operando"), "throttled": ("okp", "operando"), "standby": ("warn", "en espera"), "activating": ("warn", "activando"), "fault": ("crit", "falla"), "alarm": ("crit", "alarma"), "shutting_down": ("warn", "apagándose")}
         ciu_af = [c for c in ciudades if any(R["sys"]["ciudad"] == c and (R["cortes"] or R["en_curso"]) for R in RS)]
-        txt_ciu = ", ".join(c.title() for c in ciu_af)
+        txt_ciu = ", ".join(_nc(c) for c in ciu_af)
         # agrupados por zona (conjunto residencial): primero la zona con más sistemas de cada ciudad
         def _zona_nombre(z):
             n_ = (z or "").strip().title()
@@ -1437,7 +1459,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             partes = [_pl(len(miembros), "sistema", "sistemas"), (f"{n_sr} sin red" if n_sr else "todos con red")]
             if n_fa:
                 partes.append(f"{n_fa} con falla de respaldo en su último corte")
-            nom_z = (gk[0].title() + " · " if len(ciu_af) > 1 else "") + _zona_nombre(gk[1])
+            nom_z = (_nc(gk[0]) + " · " if len(ciu_af) > 1 else "") + _zona_nombre(gk[1])
             lista_est.append(f'<tr class="ciudad"><td colspan="5">{esc(nom_z)} <span style="font-weight:400;color:var(--ink2);font-size:12.5px">· {esc(" · ".join(partes))}</span></td></tr>')
             lista_est.extend(miembros)
         filas_est = []
@@ -1475,7 +1497,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         n_est_tot = sum(1 for R in RS if R["sys"]["ciudad"] in ciu_af)
         sec_estado = (f'<section><h2>Estado actual de los sistemas · {esc(txt_ciu)}</h2><div class="card">'
                       f'<p class="note" style="margin:0 0 10px">{n_est_bien} de {n_est_tot} sistemas están normales (con red, batería sobre 50 % y el inversor operando); '
-                      f'{len(en_curso)} sin red. Último dato del inversor: muestras cada 15 min.</p>' + tabla(est_head, filas_est, 760) + '</div></section>') if ciu_af else ""
+                      f'{len(en_curso)} sin red. Cada dato del inversor lleva su hora.</p>' + tabla(est_head, filas_est, 760) + '</div></section>') if ciu_af else ""
         sec_resp = ""
         for e in EV:
             if e["n"] < 3:
@@ -1519,7 +1541,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             # sistemas cuyos cortes duraron mucho menos que el evento: otra alimentación (microcortes propios); se muestran pero no representan al conjunto
             propios = [R_["sys"]["casa"] for R_, cs_ in por_R.values() if e["dur"] and e["dur"] >= 30 and max((c_["dur"] or 0) for c_ in cs_) < 0.4 * e["dur"]]
             nota_propios = (f' {", ".join(sorted(propios, key=num_casa))} tuvieron cortes de pocos segundos, mucho más cortos que el evento: es otra alimentación con microcortes propios y no representa al conjunto de su ciudad.' if propios else "")
-            sec_resp += (f'<section><h2>Cómo respondió el respaldo · {esc(e["ciudad"].title())} {hb(e["ini"])}–{fin_e}</h2><div class="card" style="display:flex;flex-direction:column;gap:12px">'
+            sec_resp += (f'<section><h2>Cómo respondió el respaldo · {esc(_nc(e["ciudad"]))} {hb(e["ini"])}–{fin_e}</h2><div class="card" style="display:flex;flex-direction:column;gap:12px">'
                          f'<p class="note" style="margin:0">{e["n"]} de {n_por_ciudad.get(e["ciudad"], 0)} sistemas afectados, {e["cortes"]} cortes. Cada columna es un corte de ese evento, en orden; el tiempo que vio la casa es el que estuvo sin tensión en el medidor solar (lado respaldado). Ordenado de peor a mejor respaldo.{esc(nota_propios)}</p>'
                          + tabla(m_head, rows_m, 640) + tabla(r_head, rows_r, 700 + 150 * n_c) + '</div></section>')
         # eventos de menos de 3 sistemas (cortes aislados): una sola tabla con una fila por sistema
@@ -1532,7 +1554,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                 vio_ = "sin hueco" if not c_["perc"] else "vio " + fmt(c_["perc"])
                 fin_c = "en curso" if c_["b"] is None else hb(c_["b"], True)
                 soc_a = ("—" if c_.get("soc0") is None else f'{c_["soc0"]:.0f}') + " → " + ("—" if c_.get("soc1") is None else f'{c_["soc1"]:.0f}') + " %"
-                rows_a.append(f'<tr class="{"r0" if c_["b"] is None else ""}"><td><b>{esc(s_["casa"])}</b><small>{esc(s_["ciudad"].title())} · {esc(s_["marca"].title())} {esc(s_["modelo"])} · serie {esc(R_["inv_name"] or "—")}</small></td>'
+                rows_a.append(f'<tr class="{"r0" if c_["b"] is None else ""}"><td><b>{esc(s_["casa"])}</b><small>{esc(_nc(s_["ciudad"]))} · {esc(s_["marca"].title())} {esc(s_["modelo"])} · serie {esc(R_["inv_name"] or "—")}</small></td>'
                               f'<td>{hb(c_["a"], True)}{"≈" if c_.get("estimado") else ""} → {fin_c}<small>sin red {fmt(c_["dur"] or 0)}</small></td>'
                               f'<td>{_pill(_niv_v.get(vr_, "off"), _corto.get(vr_, vr_))}<small>{vio_}{" · provisional: el corte sigue abierto" if c_.get("abierto") else ""}</small></td><td class="n">{soc_a}</td></tr>')
         sec_aisl = ""
@@ -1542,6 +1564,16 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
                         '<p class="note" style="margin:0">Cortes que afectaron a un solo sistema: no forman un evento de la ciudad (otra alimentación).</p>' + tabla(a_head, rows_a, 640) + '</div></section>')
         sec_resp += sec_aisl
         sub_ciu = f" · {txt_ciu}" if 0 < len(ciu_af) <= 2 else ""
+        # rótulo superior y límites según la ventana (de 00:00 a la hora de corte, o un periodo pedido con --inicio) y el alcance (todo el portafolio o un conjunto con --zona)
+        if ZONA_REP:
+            kick_int = f"{ZONA_REP} · {_pl(n_sys, 'sistema', 'sistemas')}" + ("" if args.inicio else f" · hoy, hasta las {fin.strftime('%H:%M')}")
+        else:
+            kick_int = f"Hoy, hasta las {fin.strftime('%H:%M')} · {len(ciudades)} ciudades · {n_sys} sistemas"
+        if args.inicio:
+            lim_ventana = f"El reporte cubre de {h_ini} a {h_fin}; no incluye cortes anteriores. Un corte que empezó antes de las {ini.strftime('%H:%M')} se cuenta solo desde esa hora."
+        else:
+            lim_ventana = "El reporte cubre desde las 00:00 de hoy hasta la hora de corte; no incluye cortes anteriores. Un corte que empezó antes de las 00:00 se cuenta solo desde esa hora."
+        lim_zona = (f"<p>Solo se analizan los sistemas del conjunto {esc(ZONA_REP)}: el resto del portafolio no entra en ninguna cifra, evento ni mapa de este reporte.</p>" if ZONA_REP else "")
         pagina = f'''<title>{esc(titulo + sub_ciu)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -1550,7 +1582,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <div class="wrap">
 <header>
   {LOGO}
-  <div class="kick">Hoy, hasta las {fin.strftime('%H:%M')} · {len(ciudades)} ciudades · {n_sys} sistemas</div>
+  <div class="kick">{kick_int}</div>
   <h1>Interrupciones de hoy{esc(sub_ciu)}</h1>
   <div class="status {estado_cls}"><i></i>{esc(estado_txt)}</div>
   <div class="meta"><span>{esc(h_ini)} a {esc(h_fin)} (UTC−5)</span><span>Fuente: telemetría cruda de Metrum</span><span>Generado {gen.strftime('%H:%M')}</span></div>
@@ -1587,10 +1619,10 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 <section>
   <h2>Límites del análisis</h2>
   <div class="limits">
-    <p>El reporte cubre desde las 00:00 de hoy hasta la hora de corte; no incluye cortes anteriores. Un corte que empezó antes de las 00:00 se cuenta solo desde esa hora.</p>
+    <p>{lim_ventana}</p>{lim_zona}
     <p>Los medidores de red sin tensión envían sus eventos guardados solo cuando vuelve la red. Un corte en curso se detecta con el inversor (entrada de red por debajo de 5 V) y su hora de inicio es aproximada (≈) hasta que vuelva la red. También lleva ≈ el corte cuyo evento de caída no llegó (solo el de regreso de la red): su inicio se estima con la última tensión vista en el medidor de red o en el inversor.</p>
     <p>Los relojes de los medidores difieren hasta unos 40 s entre sí. Cada hueco cuenta en un solo corte: el que empieza hasta 75 s de su inicio, si no el que lo contiene, si no el último que terminó hasta 10 min antes.</p>
-    <p>Los inversores se muestrean cada 15 min. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
+    <p>Los inversores se muestrean cada minuto o cada 15 min, según el sistema. El SOC de inicio y fin de cada corte es el de la muestra más cercana y la reserva se toma como {RESERVA:.0f} % para todos.</p>
     <p>Cada sistema es una casa (medidor de red, medidor solar, inversor y gateway). Si una casa tiene dos inversores se usa el que reportó más recientemente.{lim_bat}</p>
   </div>
 </section>
