@@ -440,6 +440,11 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # ------------------------------------------------ puntos relevantes
     P = []
+    # el reporte diario solo trae las interrupciones de red de MIN_INTERRUPCION_S o más (instrucción del usuario, 26-nov: 2 min); estos textos lo dicen
+    min_txt = f" de {fmt(MIN_INTERRUPCION_S)} o más" if MIN_INTERRUPCION_S else ""
+    umbral_h = max(10, MIN_INTERRUPCION_S)            # mínimo de duración de los huecos de tensión sin corte de red que se listan
+    nota_min = f"Solo se incluyen los cortes de {fmt(MIN_INTERRUPCION_S)} o más; un corte en curso siempre entra. " if MIN_INTERRUPCION_S else ""
+    pocos_seg = "" if MIN_INTERRUPCION_S else ", incluidos los de pocos segundos"
     if en_curso:
         nombres = ", ".join(R["sys"]["casa"] for R in en_curso[:12]) + ("…" if len(en_curso) > 12 else "")
         bajos = [R for R in en_curso if R["soc_ult"] and R["soc_ult"][1] <= 35]
@@ -459,7 +464,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         for e in sig[:6]:
             dur = "en curso" if e["fin"] is None else fmt(e["dur"] or 0)
             resumen.append(f"{_nc(e['ciudad'])} {hbd(e['ini'])} ({e['n']} de {n_por_ciudad.get(e['ciudad'], 0)} sistemas, {dur})")
-        txt = f"{len(con_cortes)} de {n_sys} sistemas tuvieron cortes de red: {_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}."
+        txt = f"{len(con_cortes)} de {n_sys} sistemas {'tuvo' if len(con_cortes) == 1 else 'tuvieron'} cortes de red{min_txt}: {_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}."
         if resumen:
             txt += " Principales: " + "; ".join(resumen) + ("." if len(sig) <= 6 else f"; y {len(sig)-6} más.")
         if micro:
@@ -467,7 +472,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             txt += f" Además, {_pl(len(micro), 'microcorte', 'microcortes')} de menos de 1 min en {_pl(ns, 'sistema', 'sistemas')}."
         P.append(("warn" if sig else "ok", "Interrupciones", txt))
     else:
-        P.append(("ok", "Interrupciones", f"Ningún sistema registró cortes de red en la ventana ({fmt((W1-W0)/1000)})."))
+        P.append(("ok", "Interrupciones", f"Ningún sistema registró cortes de red{min_txt} en la ventana ({fmt((W1-W0)/1000)})."))
     # respaldo
     cs = [c for R in RS for c in R["cortes"] if c.get("dur")]
     if cs:
@@ -475,13 +480,13 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         cob = 100 * (1 - tot_perc / tot_dur) if tot_dur else None
         sinhueco = sum(1 for c in cs if c["perc"] == 0)
         largos = sorted(((c["perc"], R, c) for R in RS for c in R["cortes"] if c.get("dur") and c["perc"] >= 300), key=lambda x: -x[0])
-        txt = f"La casa mantuvo tensión en {dec(cob, 1)} % del tiempo de corte; {sinhueco} de {len(cs)} cortes no dejaron ningún hueco."
+        txt = f"La casa mantuvo tensión en {dec(cob, 1)} % del tiempo de corte; {sinhueco} de {_pl(len(cs), 'corte', 'cortes')} no {'dejó' if sinhueco == 1 else 'dejaron'} ningún hueco."
         if largos:
             txt += f" Huecos de 5 min o más en {len(set(id(R) for _, R, _ in largos))} sistemas; el mayor, {largos[0][1]['sys']['casa']} con {fmt(largos[0][0])}."
         P.append(("warn" if largos else "ok", "Respaldo", txt))
-    fuera = [(R, h) for R in RS for h in R["huecos_fuera"] if h["d"] >= 10]
+    fuera = [(R, h) for R in RS for h in R["huecos_fuera"] if h["d"] >= umbral_h]
     if fuera:
-        P.append(("warn", "Respaldo", f"{_pl(len(fuera), 'hueco', 'huecos')} de tensión de 10 s o más en {_pl(len(set(id(R) for R, _ in fuera)), 'casa', 'casas')} sin un corte de red asociado en los medidores de red (el mayor, {fmt(max(h['d'] for R, h in fuera))})."))
+        P.append(("warn", "Respaldo", f"{_pl(len(fuera), 'hueco', 'huecos')} de tensión de {fmt(umbral_h)} o más en {_pl(len(set(id(R) for R, _ in fuera)), 'casa', 'casas')} sin un corte de red asociado en los medidores de red (el mayor, {fmt(max(h['d'] for R, h in fuera))})."))
     # baterías
     TODOS = list(RS) + list(RB)
     agot = [(R, c) for R in TODOS for c in R["cortes"] if c.get("socmin") is not None and c["socmin"] <= RESERVA]
@@ -1368,7 +1373,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<details><summary>Por sistema</summary><div style="margin-top:10px">' + sec_sis + '</div></details>') if sec_sis else ''}
     {('<details><summary>' + tit_bat + '</summary><div style="margin-top:10px">' + sec_bat + '</div></details>') if sec_bat else ''}
     {sec_det}
-    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. {nota_min}«Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes{pocos_seg}, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
 </section>
 
@@ -1612,7 +1617,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     {('<details><summary>Por sistema</summary><div style="margin-top:10px">' + sec_sis + '</div></details>') if sec_sis else ''}
     {('<details><summary>' + tit_bat + '</summary><div style="margin-top:10px">' + sec_bat + '</div></details>') if sec_bat else ''}
     {sec_det}
-    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. «Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes, incluidos los de pocos segundos, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
+    <p class="note">Corte = intervalo entre los eventos <code>po</code> y <code>pr</code> del medidor de red. {nota_min}«Tiempo que vio la casa» = suma de los huecos de tensión del medidor solar (lado respaldado) asociados al corte, incluidos los del cambio al caer y al volver la red. «Respaldo» = (tiempo sin red del medidor de red − tiempo sin tensión del medidor solar) ÷ tiempo sin red del medidor de red; se calcula en todos los cortes{pocos_seg}, y no baja de 0 %. Sin hueco, por criterio del equipo, el cliente no percibió el corte. En «Por sistema» se muestra completo el último corte registrado de cada casa, con su veredicto de respaldo; los anteriores (del más reciente al más antiguo) van solo con su % de respaldo y la hora de inicio, y la duración sale al pasar el cursor. El detalle de todos los cortes está en el desplegable.</p>
   </div>
 </section>
 

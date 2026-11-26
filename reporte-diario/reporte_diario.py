@@ -32,6 +32,7 @@ BATERIA_LLENA_SOC = 99                # % de SOC con el que se considera la bate
 LLENO_TARDE_H = 16                    # hora local: batería llena entre LLENO_ANTES_H y esta hora = "producción limitada en la tarde"; después ya casi no hay sol que limitar
 LLENO_ANTES_H = 12                   # hora local: batería llena antes de esta hora = "producción limitada" (con la batería llena la producción se limita al consumo)
 CONSUMO_BAJO = 0.75                  # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
+MIN_INTERRUPCION_S = 0               # s: solo entran al reporte los cortes de red de esta duración o más (un corte en curso siempre entra, aún no se sabe cuánto va a durar); main() lo fija: 120 s (2 min) en el reporte diario (instrucción del usuario, 26-nov) y 0 en el reporte de interrupciones (--solo-interrupciones) salvo que se pida con --min-interrupcion
 
 def patron_yield(ciudad):
     """Yield patrón (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
@@ -627,8 +628,10 @@ def analizar(s, D, W0, W1, dias):
         c["soc0"] = s0[1] if s0 else None; c["socmin"] = min(en) if en else None; c["soc1"] = s1[1] if s1 else None
         # veredicto de respaldo: tipo de hueco en el medidor solar + quién alimenta la casa + causa de la caída
         c["veredicto"], c["fuente"], c["causa"] = veredicto_respaldo(c, bpw, soc, W1)
-    R["cortes"] = [c for c in cortes if c["a"] is not None]
-    R["huecos_fuera"] = huecos_sin_corte
+    # solo interrupciones de MIN_INTERRUPCION_S o más (duración completa del corte, no la parte que cae en la ventana); el corte en curso (sin `pr`) siempre entra.
+    # Se filtra después de repartir los huecos para que los de un corte descartado no reaparezcan como huecos sin corte asociado
+    R["cortes"] = [c for c in cortes if c["a"] is not None and (c["b"] is None or (c["b"] - c["a"]) / 1000 >= MIN_INTERRUPCION_S)]
+    R["huecos_fuera"] = [h for h in huecos_sin_corte if h["d"] >= MIN_INTERRUPCION_S]       # el mismo mínimo para los huecos de tensión sin corte de red
     R["huecos"] = huecos
     # --- estados del inversor
     est = []
@@ -699,8 +702,12 @@ def main():
     ap.add_argument("--solo-interrupciones", dest="solo_interrupciones", action="store_true",
                     help="reporte exclusivo de interrupciones: desde las 00:00 del día de --fin (o de ahora) hasta la hora de corte")
     ap.add_argument("--zona", help="solo con --solo-interrupciones: limita el reporte a un conjunto residencial (zona de Metrum, p. ej. \"Terra by Kaia\"); sin tildes ni mayúsculas")
+    ap.add_argument("--min-interrupcion", dest="min_interrupcion", type=float, default=None, metavar="SEGUNDOS",
+                    help="solo incluye los cortes de red de esta duración o más (un corte en curso siempre entra). Por defecto 120 s (2 min) en el reporte diario y 0 (todos) en --solo-interrupciones")
     ap.add_argument("--salida", default="reporte_diario.html"); ap.add_argument("--json", default="resumen_diario.json")
     args = ap.parse_args()
+    global MIN_INTERRUPCION_S
+    MIN_INTERRUPCION_S = args.min_interrupcion if args.min_interrupcion is not None else (0 if args.solo_interrupciones else 120)
     if args.zona and not args.solo_interrupciones:
         sys.exit("--zona solo se usa con --solo-interrupciones")
     W0, W1, ini, fin = ventana(args)

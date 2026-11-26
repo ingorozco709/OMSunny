@@ -1233,3 +1233,22 @@ Reportes Operativos Periódicos.
 **Efecto (Terra by Kaia, corte del 25-nov 10:24, ventana 10:15 → 11:37):** 7 sistemas (Casas 24, 63 BAQ, 101, 124, 155, 205 y 287; las Casas 230 y 300 son nuevas y siguen fuera), 1 evento de 34 s: 4 con respaldo total, 2 con transferencia (101: 15 s, 124: 14 s) y 1 sin respaldo (Casa 205, 59 s).
 
 **Dónde está el código:** `--zona` en `main()` de `reporte-diario/reporte_diario.py`; `ALIAS_CIUDAD`, `_nc`, `_nc_corto`, `ZONA_REP`, `kick_int`, `lim_ventana` y `lim_zona` en `reporte-diario/reporte_html.py`.
+
+## 2026-11-26 — El reporte diario de operación solo incluye interrupciones de 2 min o más (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «Por favor de ahora en adelante en los reportes diarios de operación solo vas a incluir las interrupciones mayores o iguales a 2 min» (26-nov).
+
+**Qué la originó:** el reporte diario contaba todos los cortes de red, también los de unos segundos (microcortes del medidor de red). El del 26-nov traía 35 cortes en 11 eventos en 9 de 52 sistemas; casi todos duraron menos de 1 min (los de Barranquilla, de 33 a 34 s) y tapaban el único corte largo del día (Cali, 25-nov 14:25, 14 min 12 s).
+
+**Regla:** en el reporte diario solo se cuentan las interrupciones de red de 2 min o más. La duración es la del corte completo (de `po` a `pr`), no la parte que cae dentro de la ventana. El corte en curso (sin `pr`) siempre entra: aún no se sabe cuánto va a durar y es lo más urgente. El mismo mínimo vale para los huecos de tensión sin corte de red asociado. El reporte de interrupciones bajo demanda (`--solo-interrupciones`) no filtra por defecto.
+
+**Cómo se aplicó:**
+- `MIN_INTERRUPCION_S` en `reporte_diario.py` (0 en el módulo; `main()` lo fija en 120 s en el reporte diario y en 0 en `--solo-interrupciones`). Nueva opción `--min-interrupcion SEGUNDOS` para fijarlo a mano en cualquiera de los dos (`--min-interrupcion 0` devuelve el comportamiento anterior).
+- El filtro está en `analizar()`, después de `repartir_huecos`: `R["cortes"]` solo trae los cortes de la duración mínima (o en curso) y `R["huecos_fuera"]` los huecos sin corte de esa duración. Así todo lo demás (puntos relevantes, eventos de red, por ciudad, «Por sistema», respaldo, baterías durante el corte, mapa y `resumen_diario.json`) ya ve solo esas interrupciones, y los huecos de un corte descartado no reaparecen como huecos sin corte asociado.
+- Textos de `reporte_html.py`: «sistemas tuvieron cortes de red de 2 min o más», «Ningún sistema registró cortes de red de 2 min o más en la ventana», «huecos de tensión de 2 min o más sin un corte de red asociado» y la nota «Solo se incluyen los cortes de 2 min o más; un corte en curso siempre entra» junto a la definición de corte. Ya no sale «microcortes de menos de 1 min» ni «incluidos los de pocos segundos». Concordancia de «1 sistema tuvo» y «1 corte no dejó ningún hueco».
+
+**Efecto (ventana del 26-nov 07:00):** antes 9 de 52 sistemas con cortes, 35 cortes, 11 eventos y 7 huecos sin corte de 10 s o más; ahora 1 de 52 sistemas, 1 corte (Cali, 25-nov 14:25, 14 min 12 s, respaldo del 100 %), 1 evento y ningún hueco sin corte. Los 52 sistemas y las exclusiones no cambian.
+
+**Dónde está el código:** `MIN_INTERRUPCION_S`, `analizar()` y `main()` en `reporte-diario/reporte_diario.py`; `min_txt`, `umbral_h`, `nota_min` y `pocos_seg` en `generar()` de `reporte-diario/reporte_html.py`.
