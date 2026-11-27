@@ -1268,3 +1268,21 @@ Reportes Operativos Periódicos.
 **Efecto (ventana del 27-nov 07:00):** de 1 corte en 1 de 52 sistemas a ningún corte de 2 min o más: el reporte dice «Ningún sistema registró cortes de red de 2 min o más en la ventana» y `eventos_descartados` trae el corte y el hueco de la Casa 48PC. El resto de las cifras no cambia (generación 818 kWh, yield 1061, cobertura 67 %). Sin cortes no salen el semáforo del respaldo, el mapa de calor ni el SOC del corte: es normal.
 
 **Dónde está:** `reporte-diario/exclusiones.json` (`eventos_fuera`).
+
+## 2026-11-27 — Meta fija de generación diaria: el 100 % del yield patrón (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** pidió una meta fija de generación diaria «de acuerdo a los yield que manejamos» y, entre las opciones, eligió la meta del 100 % del patrón con alerta en 90 % «porque el yield patrón con el que nos estamos midiendo ya tiene un recorte del 10 %» (27-nov). También dijo que le gusta la meta por mes («no todos los meses es la misma generación»), que queda propuesta y por confirmar.
+
+**Qué la originó:** el medidor «Generación FV» se comparaba con la mediana de la generación total de los días previos: una referencia que se mueve con el desempeño reciente y no dice si el portafolio cumple lo esperado según el yield patrón.
+
+**Regla:** meta diaria de generación de un sistema = kWp × yield patrón de su región (Cali 1188, costa 1323 kWh/kWp·año) ÷ 365; la del portafolio es la suma, multiplicada por los días de la ventana (el lunes, 3). La marca tenue y la alerta están en el 90 % de la meta (`YIELD_ALERTA`), igual que el yield.
+
+**Cómo se aplicó:** en `generar()` de `reporte_html.py`, `pv_pat` pasa a ser la meta fija (`meta_gen_dia` × `ndias`, con los sistemas que tienen kWp y patrón) y la mediana de los días previos pasa a `pv_med`, que solo se muestra como referencia. El medidor, la tarjeta de generación y el punto «Rendimiento» dicen «meta» («818 kWh en 1 día (85 % de la meta de 966 kWh; −3 % frente a la mediana de los días previos)»). Con los 52 sistemas (281,6 kWp): Cali 481 kWh/día (147,7 kWp) y costa 485 (133,9 kWp), 966 en total.
+
+**Efecto:** en los últimos 15 días (ventanas del 13 al 27-nov) el portafolio generó entre 653 y 920 kWh/día: mediana del 86 % de la meta, ningún día al 100 % y 5 días al 90 % o más; el 27-nov, 818 kWh = 85 % (Cali 77 %, costa 93 %).
+
+**Por confirmar (meta por mes):** factores mensuales de irradiación horizontal, promedio de PVGIS (NSRDB 2005-2015) y NASA POWER (climatología), por región. Cali: ene 1,00, feb 1,01, mar 0,99, abr 1,02, may 0,98, jun 0,98, jul 1,03, ago 1,05, sep 1,06, oct 1,01, nov 0,94, dic 0,94. Costa (ponderada por kWp de Turbaco, Barranquilla y Cartagena): ene 1,06, feb 1,13, mar 1,12, abr 1,05, may 0,97, jun 1,00, jul 1,03, ago 1,00, sep 0,95, oct 0,88, nov 0,86, dic 0,96. Con ellos la meta de noviembre sería 869 kWh/día (Cali 453 y costa 416) y los mismos 15 días saldrían con mediana del 96 % (12 de 15 días al 90 % o más). Falta decidir si el ajuste se aplica solo a la meta de generación o también al yield proyectado y al «% del patrón» por sistema.
+
+**Dónde está el código:** `METAS["generacion"]` y `generar()` (`pv_pat`, `pv_med`, `meta_gen_dia`) en `reporte-diario/reporte_html.py`; el patrón regional en `YIELD_PATRON` de `reporte-diario/reporte_diario.py`.

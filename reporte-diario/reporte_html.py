@@ -141,7 +141,7 @@ G_GRAVE = 0.75                     # por debajo de esta fracción de la meta el 
 METAS = {                          # metas de los indicadores del resumen; None = sin meta definida (el medidor solo muestra la realidad)
     "sin_cortes": 100.0,           # % de sistemas sin cortes de red (propuesta, por confirmar)
     "respaldo": 99.0,              # % del tiempo de corte con tensión en la casa: el umbral de «Respaldo total» del reporte
-    "generacion": "patron",        # kWh: mediana de la generación total de los días previos (patrón del portafolio)
+    "generacion": "patron",        # kWh: meta fija = el 100 % del yield patrón, sistema por sistema (Σ kWp × patrón de su región ÷ 365) × los días de la ventana (instrucción del usuario, 27-nov); alerta en el 90 %
     "yield": "patron",             # kWh/kWp·año: yield patrón de la región (Cali / costa) ponderado por la kWp de cada región
     "cobertura": 90.0,             # % de cobertura solar (generación FV ÷ consumo de los clientes): meta dada por el usuario
     "exportacion": 1.0,            # kWh por día de todo el portafolio (meta del usuario, 22 oct); el medidor la multiplica por los días de la ventana y el acumulado del mes queda como texto
@@ -408,7 +408,12 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
         v = [R["pv_hist"][k] for R in RS if R["pv_hist"].get(k) is not None]
         if len(v) >= max(5, n_sys // 2):
             prev_tot.append(sum(v))
-    pv_pat = st.median(prev_tot) * ndias if len(prev_tot) >= 3 else None
+    pv_med = st.median(prev_tot) * ndias if len(prev_tot) >= 3 else None      # mediana de la generación total de los días previos: solo como referencia secundaria
+    # meta fija de generación (instrucción del usuario, 27-nov): el 100 % del yield patrón de cada región (que ya trae el recorte del 10 % del usuario), sistema por sistema:
+    # Σ kWp × patrón ÷ 365 (kWh por día de todo el portafolio) × los días de la ventana. La alerta está en el 90 % de la meta (YIELD_ALERTA), igual que en el yield.
+    _mg = [R for R in RS if cap_ok(R) and R.get("patron")]
+    meta_gen_dia = sum(R["sys"]["cap"] * R["patron"] / 365 for R in _mg) if _mg else None
+    pv_pat = meta_gen_dia * ndias if meta_gen_dia else None
 
     # ------------------------------------------------ exportación
     exp_tot = sum(R["exp"]["total"] for R in RS if R["exp"].get("total") is not None)
@@ -517,8 +522,11 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
     sinprod = [R for R in RS if R["flag"] and R["flag"][1] == "sin producción"]
     if pv_total:
         cmp_ = ""
+        _med_txt = f"{'+' if pv_total >= pv_med else '−'}{dec(abs(100*(pv_total/pv_med-1)), 0)} % frente a la mediana de los días previos" if pv_med else ""
         if pv_pat:
-            cmp_ = f" ({'+' if pv_total >= pv_pat else '−'}{dec(abs(100*(pv_total/pv_pat-1)), 0)} % frente a la mediana de los días previos)"
+            cmp_ = f" ({dec(100 * pv_total / pv_pat, 0)} % de la meta de {dec(pv_pat, 0)} kWh" + (f"; {_med_txt}" if _med_txt else "") + ")"
+        elif _med_txt:
+            cmp_ = f" ({_med_txt})"
         P.append(("ok" if not bajas else "warn", "Rendimiento", f"Generación FV del portafolio Sunny: {dec(pv_total, 0)} kWh en {ndias} {'día' if ndias == 1 else 'días'}{cmp_}. Yield proyectado a un año: {dec(yield_flota, 0) if yield_flota else '—'} kWh/kWp·año; cobertura solar: {dec(cob_flota, 0) if cob_flota is not None else '—'} %." + (f" {len(bajas)} sistemas con producción baja: " + ", ".join(f"{R['sys']['casa']} ({R['flag'][1]})" for R in sorted(bajas, key=lambda R: R['ratio'] if R['ratio'] is not None else 0)[:8]) + ("…" if len(bajas) > 8 else "") + "." if bajas else "")))
     # exportación
     if exp_tot:
@@ -543,7 +551,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
 
     # KPIs
     k_sis = f'<div class="kpi {"k-crit" if en_curso else ("k-warn" if con_cortes else "k-ok")}"><div class="v">{len(con_cortes)} <small>de {n_sys}</small></div><div class="l">sistemas con cortes de red en la ventana ({_pl(total_cortes, 'corte', 'cortes')} en {_pl(len(EV), 'evento', 'eventos')}).{" " + str(len(en_curso)) + " siguen sin red." if en_curso else ""}</div></div>'
-    k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV del portafolio Sunny en {ndias} {"día" if ndias == 1 else "días"}{(" (patrón " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
+    k_pv = f'<div class="kpi"><div class="v">{dec(pv_total, 0)} <small>kWh</small></div><div class="l">de generación FV del portafolio Sunny en {ndias} {"día" if ndias == 1 else "días"}{(" (meta " + dec(pv_pat, 0) + " kWh)") if pv_pat else ""}.</div></div>'
     k_exp = f'<div class="kpi"><div class="v">{dec(exp_tot, 0)} <small>kWh</small></div><div class="l">de energía activa exportada a la red entre el {hbd(W0)} y el {hbd(W1)}; importada {dec(imp_tot, 0)} kWh en el mismo periodo.</div></div>'
     cob_txt = "—"
     if cs:
@@ -595,7 +603,7 @@ def generar(RS, W0, W1, ini, fin, es_lunes, dias, args, t_cons, RB=()):
             dec(pv_total, 0) + " kWh", (dec(pv_pat, 0) + " kWh") if pv_pat else "sin patrón", f"Del portafolio Sunny en {ndias} {'día' if ndias == 1 else 'días'}.",
             f"Generación FV del portafolio Sunny: {dec(pv_total, 0)} kWh en {ndias} {'día' if ndias == 1 else 'días'}" + (f". Meta (patrón): {dec(pv_pat, 0)} kWh." if pv_pat else "."),
             ("0", dec(esc_gen, 0)),
-            "Generación diaria de cada sistema (balance de medidores), sumada en el portafolio. Meta: patrón = mediana de la generación total de los días previos × los días de la ventana; la marca tenue es el 90 % del patrón.",
+            "Generación diaria de cada sistema (balance de medidores), sumada en el portafolio. Meta fija: el 100 % del yield patrón de cada región (Cali y costa), sistema por sistema: kWp × patrón ÷ 365, sumada en el portafolio y multiplicada por los días de la ventana; la marca tenue es el 90 % de la meta.",
             "patrón" if pv_pat else "")
     # 4) yield proyectado frente al patrón de la región
     _cp = [R for R in _cy if R.get("patron")]
