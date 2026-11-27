@@ -1252,3 +1252,19 @@ Reportes Operativos Periódicos.
 **Efecto (ventana del 26-nov 07:00):** antes 9 de 52 sistemas con cortes, 35 cortes, 11 eventos y 7 huecos sin corte de 10 s o más; ahora 1 de 52 sistemas, 1 corte (Cali, 25-nov 14:25, 14 min 12 s, respaldo del 100 %), 1 evento y ningún hueco sin corte. Los 52 sistemas y las exclusiones no cambian.
 
 **Dónde está el código:** `MIN_INTERRUPCION_S`, `analizar()` y `main()` en `reporte-diario/reporte_diario.py`; `min_txt`, `umbral_h`, `nota_min` y `pocos_seg` en `generar()` de `reporte-diario/reporte_html.py`.
+
+## 2026-11-27 — La interrupción de la Casa 48PC del 26-nov fue la instalación del VTI: fuera del reporte (a pedido del usuario)
+
+**Aplica a:** Analista de Disponibilidad y Reportes, Generador de Reportes Operativos Periódicos, Monitor de Salud de Flota.
+
+**Instrucción del usuario:** «por favor excluyeme del reporte la interrupción de la 48PC, a esa hora estaban instalando el VTI en esa casa y por eso desenergizaron» (27-nov).
+
+**Qué la originó:** el reporte del 27-nov (ventana del 26-nov 07:00 al 27-nov 07:00) traía un solo corte de 2 min o más: Cali, Casa 48PC, 26-nov de 15:21 a 15:31 (9 min 44 s), con veredicto «Sin respaldo» (3,9 %; la casa vio 9 min 21 s sin tensión con la batería en 96 %). No era una falla: estaban instalando el VTI y desenergizaron la casa a propósito.
+
+**Regla:** los cortes y huecos de tensión que son maniobras del equipo (visitas técnicas, instalación de equipos como el VTI) no se cuentan como fallas: se descartan con `eventos_fuera` de `exclusiones.json`, con su motivo, y quedan listados en `eventos_descartados` del resumen JSON.
+
+**Cómo se aplicó:** una entrada nueva en `eventos_fuera`: Casa 48PC, de `2026-11-26T15:15` a `2026-11-26T15:45` (hora de Bogotá), que cubre el corte (15:21) y el hueco de tensión de la casa (15:22).
+
+**Efecto (ventana del 27-nov 07:00):** de 1 corte en 1 de 52 sistemas a ningún corte de 2 min o más: el reporte dice «Ningún sistema registró cortes de red de 2 min o más en la ventana» y `eventos_descartados` trae el corte y el hueco de la Casa 48PC. El resto de las cifras no cambia (generación 818 kWh, yield 1061, cobertura 67 %). Sin cortes no salen el semáforo del respaldo, el mapa de calor ni el SOC del corte: es normal.
+
+**Dónde está:** `reporte-diario/exclusiones.json` (`eventos_fuera`).

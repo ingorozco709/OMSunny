@@ -68,6 +68,12 @@
       "desde": "2026-10-24T00:00",
       "hasta": "2026-10-25T00:00",
       "motivo": "Cambio del breaker de carga de 50 A de la casa el sábado 24 oct, por los disparos de la protección de carga del sistema"
+    },
+    {
+      "casa": "Casa 48PC",
+      "desde": "2026-11-26T15:15",
+      "hasta": "2026-11-26T15:45",
+      "motivo": "Instalación del VTI en la casa el 26 nov: la desenergizaron a propósito (corte de 15:21 a 15:31), no fue una falla de la red"
     }
   ]
 }
