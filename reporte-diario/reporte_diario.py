@@ -34,10 +34,38 @@ LLENO_ANTES_H = 12                   # hora local: batería llena antes de esta 
 CONSUMO_BAJO = 0.75                  # consumo del día por debajo de esta fracción del habitual de la casa (mediana de sus días previos) = "bajo consumo"
 MIN_INTERRUPCION_S = 0               # s: solo entran al reporte los cortes de red de esta duración o más (un corte en curso siempre entra, aún no se sabe cuánto va a durar); main() lo fija: 120 s (2 min) en el reporte diario (instrucción del usuario, 26-nov) y 0 en el reporte de interrupciones (--solo-interrupciones) salvo que se pida con --min-interrupcion
 
-def patron_yield(ciudad):
-    """Yield patrón (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
+# Factor mensual del yield patrón (instrucción del usuario, 27-nov: «no todos los meses es la misma generación»): irradiación horizontal media del mes ÷ la media del año, por región,
+# ponderada por los días de cada mes (el promedio del año es 1 y la meta anual no cambia). Es el promedio de PVGIS-NSRDB (2005-2015) y NASA POWER (climatología) de cada ciudad;
+# la costa pondera Turbaco, Barranquilla y Cartagena por su kWp. El patrón de un día de ese mes es el yield patrón anual × su factor. Son valores climatológicos aproximados:
+# con 12 meses de datos propios se pueden reemplazar. Para volver a un patrón sin estacionalidad basta poner todos los factores en 1.
+FACTOR_MES = {
+    "CALI":  [0.9957, 1.0110, 0.9938, 1.0160, 0.9798, 0.9846, 1.0297, 1.0470, 1.0578, 1.0078, 0.9424, 0.9354],
+    "COSTA": [1.0614, 1.1344, 1.1193, 1.0531, 0.9747, 0.9963, 1.0345, 0.9965, 0.9484, 0.8764, 0.8561, 0.9573],
+}
+MESES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+def region_yield(ciudad):
+    """Región del yield patrón de la ciudad: «CALI» o «COSTA»; None si la ciudad no está en ninguna."""
     c = (ciudad or "").strip().upper()
-    return YIELD_PATRON["CALI"] if c == "CALI" else (YIELD_PATRON["COSTA"] if c in CIUDADES_COSTA else None)
+    return "CALI" if c == "CALI" else ("COSTA" if c in CIUDADES_COSTA else None)
+
+def patron_yield(ciudad):
+    """Yield patrón anual (kWh/kWp·año) de la región de la ciudad: Cali o costa; None si la ciudad no está en ninguna."""
+    r = region_yield(ciudad)
+    return YIELD_PATRON[r] if r else None
+
+def factor_mes(ciudad, mes):
+    """Factor mensual del yield patrón de la región de la ciudad en el mes (1 a 12); None si la ciudad no está en ninguna región."""
+    r = region_yield(ciudad)
+    return FACTOR_MES[r][mes - 1] if r else None
+
+def patron_ventana(ciudad, meses):
+    """Yield patrón (kWh/kWp·año) de la región de la ciudad ajustado a los días evaluados: el patrón anual × el factor del mes de cada día (`meses`: un número de mes por día),
+    promediado cuando los días caen en dos meses. Sin meses devuelve el patrón anual; None si la ciudad no está en ninguna región."""
+    p = patron_yield(ciudad)
+    if p is None or not meses:
+        return p
+    return p * sum(factor_mes(ciudad, m) for m in meses) / len(meses)
 
 # ------------------------------------------------------------------ Metrum
 BASE = os.environ.get("METRUM_API_URL", "").rstrip("/")
